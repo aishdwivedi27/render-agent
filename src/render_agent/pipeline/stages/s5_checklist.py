@@ -149,6 +149,7 @@ def run(ctx: RunContext) -> str:
         requested=requested_views(instructions, view_set),
         declined=declined_views(instructions, view_set),
         qualifying=qualifying_dwellings(spec, view_set),
+        drawings_present={v["view_kind"] for v in catalog},
         views_only=directives.views,
         dwellings_only=directives.dwellings,
         documented=documented_fields(spec, view_set),

@@ -1,0 +1,190 @@
+"""Every row of the error table in docs/SPEC.md section 9 has a test that injects that fault.
+
+ROWS maps each row (area, failure) to the tests covering it. A row that only applies to a deferred
+component says so. test_every_spec_row_is_covered fails when the spec gains a row without a test,
+or when a named test disappears.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+import re
+
+from render_agent.images import MockProvider
+from render_agent.pipeline import gate
+from render_agent.pipeline.job import load_job, new_job
+from render_agent.pipeline.runner import RunContext, job_lock, run_job
+from tests.conftest import ROOT, make_pdf
+from tests.integration.test_m2_planning import _llm, _sheet, _start, _view
+
+DEFERRED = "DEFERRED"
+ROWS: dict[tuple[str, str], list[str]] = {
+    ("Input", "Not a PDF, empty, won't open"): [
+        "tests.unit.test_ingest",
+        "tests.integration.test_batch_run::test_batch_folder_makes_one_job_per_pdf_and_subfolder",
+    ],
+    ("Input", "Password-protected"): ["tests.unit.test_ingest"],
+    ("Input", "Scan with no text layer"): ["tests.unit.test_ingest"],
+    ("Input", "Still copying / locked"): [DEFERRED + ": watcher.py (inbox stability check)"],
+    ("Input", "Same PDF dropped twice"): [
+        "tests.integration.test_batch_run::test_batch_folder_makes_one_job_per_pdf_and_subfolder"
+    ],
+    ("Input", "No elevation or no floor plan"): [
+        "tests.integration.test_error_table::test_missing_drawing_type_makes_views_not_ready"
+    ],
+    ("Input", "Unknown/invalid directive"): [
+        "tests.integration.test_m2_planning::test_night_and_ignored_directives_reach_the_gate"
+    ],
+    ("Extraction", "Invalid JSON / schema break"): ["tests.unit.test_llm"],
+    ("Extraction", "Refusal or truncation"): ["tests.unit.test_llm"],
+    ("Extraction", "Drawings contradict"): [
+        "tests.integration.test_error_table::test_contradictions_reach_the_gate"
+    ],
+    ("Extraction", "Invalid/empty bbox"): [
+        "tests.integration.test_m2_planning::test_gate_refuses_unresolved_then_approves_and_s6_builds_prompts"
+    ],
+    ("Planning", "> 16 renders for a dwelling, or counts wrong"): [
+        "tests.unit.test_checklist_validator::test_limit_trims_from_the_bottom_of_the_priority_list"
+    ],
+    ("Planning", "Required front view missing"): [
+        "tests.unit.test_checklist_validator::test_missing_front_inserted_not_ready_with_blocker"
+    ],
+    ("Rendering", "Rate limit, timeout, 5xx, network"): [
+        "tests.integration.test_m3_rendering::test_one_render_failing_does_not_stop_others"
+    ],
+    ("Rendering", "Content-policy / bad request"): [
+        "tests.integration.test_m3_rendering::test_one_render_failing_does_not_stop_others"
+    ],
+    ("Rendering", "No image or unreadable image"): [
+        "tests.unit.test_images::test_unreadable_image_retried_once"
+    ],
+    ("Rendering", "Fails drawing check"): [
+        "tests.integration.test_m3_rendering::test_render_and_check_all",
+        "tests.integration.test_m3_rendering::test_second_fail_and_model_overall_ignored",
+    ],
+    ("Rendering", "Drawing check errors or unsure"): [
+        "tests.integration.test_m3_rendering::test_check_error_is_not_checked"
+    ],
+    ("Review", "Designer flags a render"): [
+        "tests.integration.test_m4_review::test_flag_one_regenerates_only_that_render"
+    ],
+    ("Account", "Key missing/invalid/expired"): [
+        "tests.integration.test_m2_planning::test_llm_directive_switches_model_and_unknown_is_listed",
+        "tests.unit.test_images::test_get_provider",
+    ],
+    ("Account", "Out of credit / quota / spending limit"): ["tests.integration.test_out_of_credit"],
+    ("System", "Disk below 2 GB free"): [
+        "tests.integration.test_error_table::test_low_disk_pauses_and_resumes"
+    ],
+    ("System", "Crash, reboot, power loss"): [
+        "tests.integration.test_m3_rendering::test_key_problem_pauses_then_resume_skips_finished",
+        "tests.integration.test_error_table::test_lock_is_released_when_the_holder_goes_away",
+    ],
+    ("System", "Second agent instance"): [
+        "tests.integration.test_error_table::test_second_run_of_the_same_job_does_nothing",
+        DEFERRED + ": watcher.py (agent-wide lock)",
+    ],
+    ("System", "Network down"): ["tests.unit.test_llm", DEFERRED + ": watcher.py (keeps queueing)"],
+    ("People", "Approval/review unanswered 2 working days"): [DEFERRED + ": notify.py (reminder)"],
+    ("Config", "Invalid config or unknown model ID"): ["tests.unit.test_config"],
+}
+
+
+def _spec_rows():
+    text = (ROOT / "docs" / "SPEC.md").read_text(encoding="utf-8")
+    table = text.split("## 9. Error handling")[1].split("\n## ")[0]
+    rows = []
+    for line in table.splitlines():
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) == 3 and cells[0] not in ("Area", "---") and not set(cells[0]) <= {"-"}:
+            rows.append((cells[0], cells[1]))
+    return rows
+
+
+def test_every_spec_row_is_covered():
+    spec_rows = _spec_rows()
+    assert len(spec_rows) >= 25
+    missing = [r for r in spec_rows if not any(r[0] == k[0] and r[1].startswith(k[1][:20]) for k in ROWS)]
+    assert not missing, f"error-table rows without a test entry: {missing}"
+    for key, targets in ROWS.items():
+        for t in targets:
+            if t.startswith(DEFERRED):
+                continue
+            mod, _, fn = t.partition("::")
+            module = importlib.import_module(mod)
+            assert not fn or callable(getattr(module, fn, None)), f"{key}: test {t} not found"
+
+
+# --- the rows tested here ----------------------------------------------------------------------
+def test_missing_drawing_type_makes_views_not_ready(install_settings):
+    """A set with elevations but no floor plan: interiors are NOT READY with a reason; job continues."""
+    pdf = make_pdf(install_settings.root / "d1" / "a.pdf", ["ELEVATIONS", "SITE"])
+    job = new_job(install_settings.path("jobs"), [pdf])
+    llm = _llm()
+    llm.canned["sheet_analysis.page-2"] = _sheet(
+        [_view("S", "site_plan", "top_down", (0.1, 0.1, 0.9, 0.9), "SITE")]
+    )
+    res = run_job(RunContext(job, install_settings, extras={"llm": llm}))
+    assert res.status == "AWAITING_APPROVAL"
+    cl = json.loads((job.dir / "checklist.json").read_text())
+    kitchen = next(r for r in cl["RENDER_REQUIREMENTS"] if r["view_type"] == "Kitchen")
+    assert kitchen["readiness"] == "NOT READY" and any("No floor plan" in b for b in kitchen["blockers"])
+    street = next(r for r in cl["RENDER_REQUIREMENTS"] if r["view_type"] == "Streetscape")
+    assert street["readiness"] != "NOT READY"  # the elevation is there
+    corrections = json.loads((job.dir / "checklist_validation.json").read_text())["corrections"]
+    assert any(c["rule"] == "missing_drawing" for c in corrections)
+
+
+def test_contradictions_reach_the_gate(install_settings):
+    llm = _llm()
+    llm.canned["spec"]["UNCERTAINTIES"] = [
+        "Roof pitch: 22.5 degrees on Elevation 1 but 25 degrees on Section A; both kept."
+    ]
+    pdf = make_pdf(install_settings.root / "d2" / "a.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job = new_job(install_settings.path("jobs"), [pdf])
+    run_job(RunContext(job, install_settings, extras={"llm": llm}))
+    approval = json.loads((job.dir / "approval.json").read_text())
+    assert any("22.5" in u and "25" in u for u in approval["drawing_uncertainties"])
+
+
+def test_low_disk_pauses_and_resumes(install_settings, monkeypatch):
+    from render_agent.pipeline import runner
+
+    job, _, _ = _start(install_settings)
+    assert gate.approve(job, {}, by="test") == []
+    real = runner.shutil.disk_usage
+    monkeypatch.setattr(runner.shutil, "disk_usage", lambda p: real(p)._replace(free=int(0.5e9)))
+    extras = {"llm": _llm(), "image_provider": MockProvider()}
+    res = run_job(RunContext(load_job(job.dir), install_settings, extras=extras))
+    assert res.status == "PAUSED" and "Free up disk space" in res.message
+    assert json.loads((job.dir / "error.json").read_text())["code"] == "DISK_LOW"
+    monkeypatch.setattr(runner.shutil, "disk_usage", real)
+    from tests.integration.test_m3_rendering import CheckLLM
+
+    res = run_job(
+        RunContext(
+            load_job(job.dir), install_settings, extras={"llm": CheckLLM(), "image_provider": MockProvider()}
+        )
+    )
+    assert res.status == "AWAITING_REVIEW", res.message
+
+
+def test_second_run_of_the_same_job_does_nothing(install_settings):
+    job, _, _ = _start(install_settings)
+    before = (job.dir / "state.json").read_bytes()
+    with job_lock(job.dir):  # another process is busy with this job
+        res = run_job(RunContext(load_job(job.dir), install_settings, extras={"llm": _llm()}))
+    assert "already being processed" in res.message
+    assert (job.dir / "state.json").read_bytes() == before
+
+
+def test_lock_is_released_when_the_holder_goes_away(install_settings):
+    """After a crash the OS drops the lock, so resume works (simulated by closing the holder)."""
+    job, _, _ = _start(install_settings)
+    with job_lock(job.dir):
+        pass
+    assert not (job.dir / ".running.lock").exists()
+    res = run_job(RunContext(load_job(job.dir), install_settings, extras={"llm": _llm()}))
+    assert res.status == "AWAITING_APPROVAL" and "already" not in res.message
+    assert re.search(r"approval", res.message, re.I)

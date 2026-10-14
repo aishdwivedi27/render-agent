@@ -41,6 +41,8 @@ def request_approval(job: Job, blocking: list[str] | None = None) -> dict[str, A
     checklist = read_json(job.dir / "checklist.json", "the approval gate")
     selections = read_json(job.dir / "selections.json", "the approval gate")
     validation = read_json(job.dir / "checklist_validation.json", "the approval gate")
+    spec_file = job.dir / "house_specification.json"
+    spec = read_json(spec_file, "the approval gate") if spec_file.is_file() else {}
     previous = _load(job)
     data = {
         "status": "pending",
@@ -71,6 +73,8 @@ def request_approval(job: Job, blocking: list[str] | None = None) -> dict[str, A
         "ignored_directives": selections.get("ignored_directives", []),
         "dwellings_available": validation.get("dwellings", []),
         "warnings": selections.get("warnings", []),
+        # contradictions keep both values in the spec and are listed here for the designer
+        "drawing_uncertainties": spec.get("UNCERTAINTIES", []),
         "blocking": (blocking or []) + unresolved(selections),
         "how_to_approve": (
             "Run `python -m render_agent approve <job folder> [--select key=value ...]`, "

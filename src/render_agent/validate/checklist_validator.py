@@ -43,6 +43,7 @@ class Options:
     share_groups: dict[str, list[set[str]]] = field(default_factory=dict)  # view id -> groups (from the spec)
     requested: set[str] = field(default_factory=set)  # optional view ids the instruction file asked for
     declined: set[str] = field(default_factory=set)  # view ids turned off by their opt_out_directive
+    drawings_present: set[str] | None = None  # view kinds found by stage 2; None = not checked
     qualifying: dict[str, set[str]] = field(
         default_factory=dict
     )  # view id -> dwellings (requires_documented)
@@ -317,6 +318,25 @@ class ViewRules:
                         }
                     )
                 self.log("insert_view", r, f"{view['label']} was missing; inserted as {r['readiness']}", d)
+
+    def require_drawings(self, cl: dict[str, Any]) -> None:
+        """A view whose drawing type is missing from the set is NOT READY with the reason."""
+        present = self.o.drawings_present
+        if present is None:
+            return
+        for r in cl["RENDER_REQUIREMENTS"]:
+            view = next((v for v in self.views if v["id"] == self.view_id(r)), {})
+            if view.get("interior"):
+                need, what = {"floor_plan"}, "floor plan"
+            else:
+                need, what = {"elevation", "perspective_3d"}, "elevation"
+            if present & need:
+                continue
+            reason = f"No {what} was found in the drawing set, so this view cannot be drawn from it."
+            if r["readiness"] != "NOT READY" or reason not in r["blockers"]:
+                r["readiness"] = "NOT READY"
+                r["blockers"] = [*r["blockers"], reason]
+                self.log("missing_drawing", r, reason)
 
     def trim_to_limit(self, cl: dict[str, Any]) -> None:
         for d in self.o.dwellings:
@@ -638,6 +658,7 @@ def validate(
         rules.merge_identical(cl)
     rules.max_count(cl)
     rules.insert_required(cl)
+    rules.require_drawings(cl)
     rules.trim_to_limit(cl)
     rules.recompute(cl, before)
     return cl, rules.corrections

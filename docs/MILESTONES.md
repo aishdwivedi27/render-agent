@@ -60,7 +60,7 @@ Status 14 Oct 2026: doctored images 6/6 caught (paid run; the swapped-order imag
 - [x] `report.html`, `manifest.json` (incl. knowledge-file hashes), compliance footer
 - [ ] `notify.py` (DEFERRED 14 Oct 2026): Windows toast on approval needed, review ready, failure; 2-working-day reminder
 - [ ] `scripts/install.ps1` on a clean host; Scheduled Task restart on failure
-- [ ] Fault-injection tests for every row of the spec's error table
+- [x] Fault-injection tests for every row of the spec's error table (`tests/integration/test_error_table.py` maps each row to its test; watcher/notify rows marked deferred)
 - [ ] Final `docs/INSTRUCTIONS.md`: every instruction-file option and every default, checked against the code (living draft since 14 Oct 2026)
 - [x] Wire `@llm` (per-job model choice) and read `selections.yaml` from the drop folder (both parsed/named but not applied yet; see docs/INSTRUCTIONS.md)
 

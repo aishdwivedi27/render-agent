@@ -8,7 +8,9 @@ import importlib
 import json
 import logging
 import shutil
-from collections.abc import Callable
+import sys
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -55,7 +57,66 @@ def stage_function(name: str) -> StageFn | None:
     return fn if callable(fn) else None
 
 
+class JobBusy(Exception):
+    """Another process is already running this job."""
+
+
+@contextmanager
+def job_lock(job_dir: Path) -> Iterator[None]:
+    """An OS file lock on jobs/<id>/.running.lock. The OS releases it if the process dies, so a crash
+    or reboot never leaves a stale lock behind."""
+    path = job_dir / ".running.lock"
+    fh = path.open("a+b")
+    try:
+        try:
+            if sys.platform == "win32":
+                import msvcrt
+
+                fh.seek(0)
+                msvcrt.locking(fh.fileno(), msvcrt.LK_NBLCK, 1)
+            else:
+                import fcntl
+
+                fcntl.flock(fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise JobBusy(str(job_dir)) from exc
+        yield
+    finally:
+        fh.close()  # closing the handle releases the lock
+        with suppress(OSError):  # another run holds it now; that run removes the file
+            path.unlink()
+
+
+def disk_low(ctx: RunContext) -> PauseJobError | None:
+    need = ctx.settings.watcher.min_free_disk_gb
+    free = shutil.disk_usage(ctx.job.dir).free / 1e9
+    if free >= need:
+        return None
+    return PauseJobError(
+        code="DISK_LOW",
+        what_happened=f"Only {free:.1f} GB free on the job drive; at least {need} GB is required.",
+        likely_cause="Old jobs, renders or other files have filled the disk.",
+        what_to_do="Free up disk space (for example archive finished jobs), then resume the job.",
+    )
+
+
 def run_job(ctx: RunContext, stages: dict[str, StageFn | None] | None = None) -> RunResult:
+    try:
+        with job_lock(ctx.job.dir):
+            result = _run_job(ctx, stages)
+        if ctx.extras.pop("_move_to_failed", False):  # after the lock is released (Windows)
+            _move_to_failed(ctx.job, ctx.settings.path("failed"))
+        return result
+    except JobBusy:
+        log.warning("job %s is already being processed by another run", ctx.job.id)
+        return RunResult(
+            ctx.job.state.get("status", "RUNNING"),
+            None,
+            "This job is already being processed by another run; nothing was done.",
+        )
+
+
+def _run_job(ctx: RunContext, stages: dict[str, StageFn | None] | None) -> RunResult:
     job = ctx.job
     job.state["dry_run"] = ctx.dry_run
     job.set_status("RUNNING")
@@ -71,6 +132,8 @@ def run_job(ctx: RunContext, stages: dict[str, StageFn | None] | None = None) ->
             job.mark_stage_done(name, gate.APPROVAL)
             log.info("job %s: approval gate passed", job.id)
             continue
+        if (low := disk_low(ctx)) is not None:
+            return _handle_error(ctx, name, low)
         fn = stages[name] if stages is not None and name in stages else stage_function(name)
         if fn is None:
             job.save()
@@ -110,7 +173,7 @@ def _handle_error(ctx: RunContext, stage: str, err: AgentError) -> RunResult:
         return RunResult("PAUSED", stage, f"{err.what_happened}\n  {err.what_to_do}\n  {resume}")
     job.set_status("FAILED")
     if isinstance(err, InputError):
-        _move_to_failed(job, ctx.settings.path("failed"))
+        ctx.extras["_move_to_failed"] = True
     return RunResult("FAILED", stage, err.what_happened)
 
 
