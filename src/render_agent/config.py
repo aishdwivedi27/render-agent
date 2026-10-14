@@ -65,6 +65,7 @@ class LLM(_Strict):
     timeout_seconds: int = Field(gt=0)
     retries: int = Field(ge=0)
     per_stage: dict[str, StageLLM] = Field(default_factory=dict)
+    choices: dict[str, StageLLM] = Field(default_factory=dict)  # names for @llm=<name>
 
 
 class OpenAIImages(_Strict):
@@ -230,6 +231,7 @@ def _check_provider_models(s: Settings) -> None:
     """A Claude model ID only makes sense with the anthropic provider, and the reverse."""
     pairs = [("llm", s.llm.provider, s.llm.model)]
     pairs += [(f"llm.per_stage.{k}", v.provider, v.model) for k, v in s.llm.per_stage.items()]
+    pairs += [(f"llm.choices.{k}", v.provider, v.model) for k, v in s.llm.choices.items()]
     for name, provider, model in pairs:
         if (provider == "anthropic") != model.startswith("claude-"):
             raise PermanentError(

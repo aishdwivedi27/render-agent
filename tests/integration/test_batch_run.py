@@ -54,3 +54,13 @@ def test_several_paths(install, monkeypatch, capsys):
     assert len(_jobs(install)) == 2
     assert main(["run"]) == 1
     assert "Nothing to run" in capsys.readouterr().out
+
+
+def test_selections_yaml_travels_with_its_pdf(install, monkeypatch):
+    from render_agent.cli import drop_inputs
+
+    a = make_pdf(install / "y" / "a.pdf", ["X"])
+    (install / "y" / "a.selections.yaml").write_text("roof_colour: Monument\n", encoding="utf-8")
+    assert [p.name for p in drop_inputs(a)] == ["a.pdf", "a.selections.yaml"]
+    (install / "y" / "selections.yaml").write_text("roof_colour: Monument\n", encoding="utf-8")
+    assert "selections.yaml" in [p.name for p in drop_inputs(install / "y")]

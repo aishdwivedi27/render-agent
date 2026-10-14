@@ -22,7 +22,17 @@ def llm_for(ctx: RunContext, stage: str) -> LLM:
         return injected  # type: ignore[no-any-return]
     if ctx.dry_run:
         return OfflineLLM()
-    return get_llm(ctx.settings, stage, raw_dir=ctx.job.dir / "llm")
+    return get_llm(ctx.settings, stage, raw_dir=ctx.job.dir / "llm", job_choice=job_llm_choice(ctx))
+
+
+def job_llm_choice(ctx: RunContext) -> str | None:
+    """The @llm=<name> directive of this job, when the name is one of llm.choices."""
+    from render_agent.util.directives import parse_directives
+
+    if not (ctx.job.dir / "ingest.json").is_file():
+        return None
+    name = parse_directives(ingest_info(ctx).get("instructions", "")).llm
+    return name if name in ctx.settings.llm.choices else None
 
 
 def load_schema(ctx: RunContext, name: str) -> dict[str, Any]:

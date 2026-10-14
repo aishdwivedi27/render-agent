@@ -124,9 +124,9 @@ def _with_settings(fn: Callable[[argparse.Namespace, Settings], int]) -> Callabl
 def drop_inputs(src: Path) -> list[Path]:
     """The files of one job: a folder's PDFs and .txt files, or a PDF plus a same-named .txt."""
     if src.is_dir():
-        return sorted(src.glob("*.pdf")) + sorted(src.glob("*.txt"))
-    side = src.with_suffix(".txt")
-    return [src, side] if side.is_file() else [src]
+        return sorted(src.glob("*.pdf")) + sorted(src.glob("*.txt")) + sorted(src.glob("*selections.yaml"))
+    sides = [src.with_suffix(".txt"), src.with_suffix(".selections.yaml")]
+    return [src, *(p for p in sides if p.is_file())]
 
 
 def batch_sources(folder: Path) -> list[Path]:

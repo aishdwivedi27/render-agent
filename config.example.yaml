@@ -21,6 +21,9 @@ llm:
   timeout_seconds: 300
   retries: 5
   per_stage: {}               # e.g. {sheet_analysis: {provider: anthropic, model: claude-sonnet-5-5}}
+  choices:                    # names a job can pick with @llm=<name> (overrides provider/model/per_stage)
+    gpt: {provider: openai, model: gpt-5.6-sol}
+    sonnet: {provider: anthropic, model: claude-sonnet-5-5}
 
 images:
   provider: openai            # openai | muapi | mock

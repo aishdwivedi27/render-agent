@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
@@ -58,6 +59,31 @@ def view_catalog(ctx: RunContext) -> list[dict[str, Any]]:
     return out
 
 
+def read_selections_file(job_dir: Path, inputs: list[dict[str, str]]) -> tuple[dict[str, str], list[str]]:
+    """selections.yaml (or <name>.selections.yaml) from the drop: item key -> value, like @select."""
+    import yaml
+
+    out: dict[str, str] = {}
+    problems: list[str] = []
+    for i in inputs:
+        if not i["name"].lower().endswith("selections.yaml"):
+            continue
+        try:
+            data = yaml.safe_load((job_dir / "input" / i["name"]).read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError as exc:
+            problems.append(f"{i['name']}: not valid YAML ({str(exc).splitlines()[0]}); ignored")
+            continue
+        if not isinstance(data, dict):
+            problems.append(f"{i['name']}: expected 'item: value' lines; ignored")
+            continue
+        for k, v in data.items():
+            if isinstance(v, (str, int, float)) and str(v).strip():
+                out[str(k).strip().lower()] = str(v).strip()
+            else:
+                problems.append(f"{i['name']}: {k} has no usable value; ignored")
+    return out, problems
+
+
 def schedule_warnings(catalog: list[dict[str, Any]], spec: dict[str, Any]) -> list[str]:
     """A colour/material schedule found on a sheet must reach the spec; say so at the gate if not."""
     found = [
@@ -92,6 +118,12 @@ def run(ctx: RunContext) -> str:
     spec = read_json(job.dir / "house_specification.json", STAGE)
     instructions = ingest_info(ctx).get("instructions", "")
     directives = parse_directives(instructions)
+    if directives.llm and directives.llm not in ctx.settings.llm.choices:
+        known = ", ".join(sorted(ctx.settings.llm.choices)) or "none configured"
+        directives.ignored.append(f"@llm={directives.llm} (unknown model choice; known: {known})")
+    file_selects, file_problems = read_selections_file(job.dir, job.state.get("inputs", []))
+    directives.select = {**file_selects, **directives.select}  # @select lines win
+    directives.ignored += file_problems
     view_set = load_view_set(knowledge)
     limit = render_limit(ctx, view_set, directives)
     catalog = view_catalog(ctx)

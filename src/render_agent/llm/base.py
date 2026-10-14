@@ -281,10 +281,13 @@ def map_vendor_error(exc: Exception, sdk: Any, provider: str) -> Exception:
     )
 
 
-def get_llm(settings: Settings, stage: str, raw_dir: Path | None = None) -> BaseLLM:
-    """The configured LLM for a stage (llm.per_stage overrides the default)."""
+def get_llm(
+    settings: Settings, stage: str, raw_dir: Path | None = None, job_choice: str | None = None
+) -> BaseLLM:
+    """The configured LLM for a stage: the job's @llm choice (a name in llm.choices) wins, then
+    llm.per_stage, then the default."""
     cfg = settings.llm
-    choice = cfg.per_stage.get(stage)
+    choice = cfg.choices.get(job_choice or "") or cfg.per_stage.get(stage)
     provider, model = (choice.provider, choice.model) if choice else (cfg.provider, cfg.model)
     common = {
         "model": model,

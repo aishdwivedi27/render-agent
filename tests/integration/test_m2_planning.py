@@ -371,3 +371,35 @@ def _llm_with(e1):
     llm = _llm()
     llm.canned["sheet_analysis.page-1"]["views"][0] = e1
     return llm
+
+
+def test_llm_directive_switches_model_and_unknown_is_listed(install_settings):
+    pdf = make_pdf(install_settings.root / "drop4" / "a.pdf", ["ELEVATIONS"])
+    txt = pdf.parent / "a.txt"
+    txt.write_text("@llm=sonnet", encoding="utf-8")
+    job = new_job(install_settings.path("jobs"), [pdf, txt])
+    res = run_job(RunContext(job, install_settings))  # no injected LLM: the real factory decides
+    assert res.status == "PAUSED" and "ANTHROPIC_API_KEY" in res.message  # sonnet chosen, no key here
+
+    job2, _, _ = _start(install_settings, "@llm=gemini")
+    ignored = json.loads((job2.dir / "approval.json").read_text())["ignored_directives"]
+    assert any("@llm=gemini" in i and "sonnet" in i for i in ignored)
+
+
+def test_selections_yaml_presets_choices(install_settings):
+    pdf = make_pdf(install_settings.root / "drop5" / "set" / "a.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    sel = pdf.parent / "selections.yaml"
+    sel.write_text(
+        "roof_colour: Monument\nentry_door: pivot, timber\nwindow_frames: [bad]\n", encoding="utf-8"
+    )
+    txt = pdf.parent / "instructions.txt"
+    txt.write_text("@select roof_colour=Basalt", encoding="utf-8")  # a directive line wins over the file
+    job = new_job(install_settings.path("jobs"), [pdf, txt, sel])
+    run_job(RunContext(job, install_settings, extras={"llm": _llm()}))
+    items = {i["key"]: i for i in json.loads((job.dir / "selections.json").read_text())["items"]}
+    assert items["roof_colour"]["chosen"] == "Basalt" and items["roof_colour"]["is_override"]
+    assert (
+        items["entry_door_type"]["chosen"] == "pivot" and items["entry_door_material"]["chosen"] == "timber"
+    )
+    ignored = json.loads((job.dir / "approval.json").read_text())["ignored_directives"]
+    assert any("window_frames" in i for i in ignored)
