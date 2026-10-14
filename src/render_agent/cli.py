@@ -212,6 +212,8 @@ def cmd_review(args: argparse.Namespace, settings: Settings) -> int:
     if job.first_unfinished_stage() != "s9_review":
         print(f"Job {job.id} is not waiting for review (status {job.state['status']}).")
         return 1
+    if args.serve:
+        return serve_review(job, settings)
     review = s9_review.load_review(job.dir)
     problems = []
     ids = list(review["renders"])
@@ -235,6 +237,31 @@ def cmd_review(args: argparse.Namespace, settings: Settings) -> int:
     if problems:
         return 1
     return _run(job, settings, bool(job.state.get("dry_run", False)))
+
+
+def serve_review(job: Job, settings: Settings) -> int:
+    """Runs the review page on 127.0.0.1 until Ctrl+C."""
+    import webbrowser
+
+    from render_agent.review.server import ReviewApp, make_server
+
+    def continue_job() -> str:
+        result = _run_job(load_job(job.dir), settings, bool(job.state.get("dry_run", False)))
+        return f"{result.status}: {result.message}"
+
+    app = ReviewApp(job.dir, continue_job)
+    server = make_server(app, settings.review.host, settings.review.port)
+    url = f"http://{settings.review.host}:{server.server_address[1]}/"
+    print(f"Review page for {job.id}: {url}  (Ctrl+C to stop)")
+    if settings.review.open_browser:
+        webbrowser.open(url)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
+    return 0
 
 
 def _todo(name: str) -> Callable[[argparse.Namespace], int]:
@@ -285,6 +312,7 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("job")
     review.add_argument("--approve", action="append", default=[], metavar="ID|all")
     review.add_argument("--flag", action="append", default=[], metavar='ID="note"')
+    review.add_argument("--serve", action="store_true", help="open the review page on 127.0.0.1")
     review.set_defaults(func=_with_settings(cmd_review))
     return p
 

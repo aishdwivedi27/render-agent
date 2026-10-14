@@ -55,14 +55,14 @@ Status 14 Oct 2026: doctored images 6/6 caught (paid run; the swapped-order imag
 
 - [x] Manual batch trigger instead (decision 14 Oct 2026): `run` takes several PDFs/folders or `--batch <folder>`, one job each, failures isolated, duplicate PDFs skipped (`--force` to redo), summary table
 - [ ] `watcher.py` (DEFERRED 14 Oct 2026): polling, stability check, hash de-dup, single-instance lock, disk-space guard
-- [ ] s9 review page (127.0.0.1), approve/flag with note, regenerate flagged only, versions kept, approved locked; `review.txt` fallback; approving exports the clean image (no DRAFT overlay) to the dwelling folders — done 14 Oct 2026 except the 127.0.0.1 page (CLI + review.txt work)
+- [x] s9 review page (127.0.0.1), approve/flag with note, regenerate flagged only, versions kept, approved locked; `review.txt` fallback; approving exports the clean image (no DRAFT overlay) to the dwelling folders — page: `review <job> --serve`
 - [x] `output/folders.py`: Common + `Dwelling N` folders, shared renders copied into each dwelling, manifest; single house has no Common
 - [x] `report.html`, `manifest.json` (incl. knowledge-file hashes), compliance footer
 - [ ] `notify.py` (DEFERRED 14 Oct 2026): Windows toast on approval needed, review ready, failure; 2-working-day reminder
 - [ ] `scripts/install.ps1` on a clean host; Scheduled Task restart on failure
 - [ ] Fault-injection tests for every row of the spec's error table
 - [ ] Final `docs/INSTRUCTIONS.md`: every instruction-file option and every default, checked against the code (living draft since 14 Oct 2026)
-- [ ] Wire `@llm` (per-job model choice) and read `selections.yaml` from the drop folder (both parsed/named but not applied yet; see docs/INSTRUCTIONS.md)
+- [x] Wire `@llm` (per-job model choice) and read `selections.yaml` from the drop folder (both parsed/named but not applied yet; see docs/INSTRUCTIONS.md)
 
 **Exit gate:** 10 drops on the Windows host, including a restart mid-render, all end in the correct status; one flag regenerates exactly one render and every other file is byte-identical.
 

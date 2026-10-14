@@ -7,6 +7,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 from typing import Any
 
@@ -19,10 +20,24 @@ def atomic_write_bytes(path: Path, data: bytes) -> None:
             fh.write(data)
             fh.flush()
             os.fsync(fh.fileno())
-        Path(tmp).replace(path)
+        _replace(Path(tmp), path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+REPLACE_TRIES = 20  # x 0.1 s: Windows refuses a rename while antivirus or a reader holds the file
+
+
+def _replace(tmp: Path, path: Path) -> None:
+    for attempt in range(REPLACE_TRIES):
+        try:
+            tmp.replace(path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.1)
 
 
 def atomic_write_text(path: Path, text: str) -> None:
@@ -45,3 +60,15 @@ def safe_name(text: str, max_len: int = 80) -> str:
     """A Windows-safe file or folder name."""
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text).strip(" .")
     return cleaned[:max_len] or "unnamed"
+
+
+def read_text(path: Path) -> str:
+    """read_text that waits out a brief Windows lock (antivirus, a concurrent rename)."""
+    for attempt in range(REPLACE_TRIES):
+        try:
+            return path.read_text(encoding="utf-8")
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise
+            time.sleep(0.1)
+    raise AssertionError("unreachable")

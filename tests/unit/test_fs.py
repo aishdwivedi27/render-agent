@@ -48,3 +48,24 @@ def test_safe_name_is_windows_safe():
 def test_safe_name_never_empty_and_truncates():
     assert safe_name("...") == "unnamed"
     assert len(safe_name("x" * 200)) == 80
+
+
+def test_atomic_write_retries_while_windows_holds_the_file(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    from render_agent.util import fs
+
+    real = Path.replace
+    calls = {"n": 0}
+
+    def flaky(self, target):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise PermissionError(32, "being used by another process")
+        return real(self, target)
+
+    monkeypatch.setattr(Path, "replace", flaky)
+    monkeypatch.setattr(fs.time, "sleep", lambda s: None)
+    fs.atomic_write_text(tmp_path / "a.json", "{}")
+    assert (tmp_path / "a.json").read_text() == "{}" and calls["n"] == 3
+    assert not list(tmp_path.glob(".*.tmp"))

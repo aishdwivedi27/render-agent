@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from render_agent.errors import PermanentError
 from render_agent.llm.base import LLM, get_llm
 from render_agent.llm.offline import OfflineLLM
+from render_agent.util.fs import read_text
 
 if TYPE_CHECKING:
     from render_agent.pipeline.runner import RunContext
@@ -47,7 +48,7 @@ def read_json(path: Path, stage: str) -> Any:
             likely_cause="An earlier stage's output was deleted or moved.",
             what_to_do="Reset the earlier stage in state.json to 'pending' and resume the job.",
         )
-    return json.loads(path.read_text(encoding="utf-8"))
+    return json.loads(read_text(path))
 
 
 def ingest_info(ctx: RunContext) -> dict[str, Any]:
