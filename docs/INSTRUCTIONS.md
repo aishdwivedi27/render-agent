@@ -16,7 +16,8 @@ python -m render_agent run --batch drawings --dry-run              same, no paid
 
 - A PDF is one job; an instruction file with the same name next to it (`house_b.pdf` +
   `house_b.txt`) goes with it.
-- A folder is one drawing set: all its PDFs and `.txt` files form one job.
+- A folder is one drawing set: all its PDFs, `.txt` files and `selections.yaml` form one job.
+- A `<name>.selections.yaml` next to a PDF also goes with it (see "Material choices in a file").
 - Every job gets its own folder in `jobs\` and its own output; one failing never stops the others,
   and a batch ends with a summary table.
 - PDFs that were already processed are skipped with a pointer to the existing job; add `--force` to
@@ -24,8 +25,8 @@ python -m render_agent run --batch drawings --dry-run              same, no paid
 - Each job stops at the approval gate: `python -m render_agent approve jobs\<job-id>`.
 
 
-Drop a **folder** into `inbox/` holding the drawing PDF(s) and a plain-text file such as
-`instructions.txt`. A PDF dropped on its own runs with every default below.
+A job can be given a plain-text instruction file such as `instructions.txt` (in the drawing
+set's folder, or `<name>.txt` next to the PDF). A PDF on its own runs with every default below.
 
 - Lines starting with `@` are **directives**: they change what the agent does.
 - Every other line is **free text**: passed to the planning and prompt models as presentation
@@ -87,9 +88,9 @@ Tips:
 | `@select` | `@select roof_colour=Monument` | Sets a material or colour (see the table below). Overrides the drawing's value; every override is logged and shown at the gate | Values from the drawings' colour schedule and notes |
 | `@max_images` | `@max_images=8` | Lowers the planned renders per dwelling. Cannot raise it | 16 per dwelling (a limit, not a target) |
 | `@views` | `@views=Kitchen,Living` | Only these views (the front view is always kept) | Full standard view set |
-| `@dwellings` | `@dwellings=DWELLING 1` | Only these dwellings (also drops the streetscape) | All dwellings |
+| `@dwellings` | `@dwellings=DWELLING 1` | Only views that show these dwellings (a streetscape is not added automatically, but one already planned is kept because it shows them too) | All dwellings |
 | `@provider` | `@provider=muapi` | Image provider for this job: `openai`, `muapi` or `mock` | `images.provider` in config.yaml (openai, gpt-image-2) |
-| `@llm` | `@llm=sonnet` | Language model for this job. **Read but not applied yet** (see below) | `llm` in config.yaml (gpt-5.6-sol) |
+| `@llm` | `@llm=sonnet` | Language model for this whole job: a name from `llm.choices` in config.yaml (`gpt`, `sonnet`). An unknown name is ignored and listed at the gate | `llm` in config.yaml (gpt-5.6-sol) |
 | `@dry_run` | `@dry_run=true` | Mock images, no drawing check, no spend | Real (paid) run after approval |
 
 True/false values accept `true/false`, `yes/no`, `on/off`, `1/0`.
@@ -119,7 +120,25 @@ lines read from it), then each item grouped as *from the drawings*, *standard de
 
 Shortcut: `@select entry_door=pivot, timber` fills `entry_door_type` then `entry_door_material`
 (the same works for `garage_door=...` and `roof=...`). Any value may be typed, not only the listed options.
-The list lives in `knowledge/materials_library.yaml`.
+The list lives in `private/knowledge/materials_library.yaml`.
+
+A COLORBOND colour name (from the schedule, a default or your choice) is rendered as the real product
+colour: the prompt carries its tone, e.g. "Woodland Grey: dark grey with a green undertone"
+(`private/knowledge/colour_swatches.yaml`).
+
+### Material choices in a file (`selections.yaml`)
+
+Instead of `@select` lines you can put the choices in `selections.yaml` (in the drawing set's folder)
+or `<name>.selections.yaml` (next to a PDF), one `item: value` per line, same keys and shortcuts:
+
+```yaml
+roof_colour: Monument
+window_frames: Aluminium, black
+entry_door: pivot, timber
+```
+
+If both the file and an `@select` line set the same item, the `@select` line wins. Lines that are not
+`item: value` are ignored and listed at the gate.
 
 ## Views planned without an instruction file
 
@@ -163,8 +182,8 @@ dwellings each get their own set (the streetscape still shows them together).
 | Drafting symbols | Window V lines, door swing lines, dimensions never drawn | (always) |
 | Text in images | None (no numbers, labels, logos) | (always) |
 
-Defaults for styling live in `knowledge/visualisation_defaults.md`; global image rules in
-`prompts/render_rules.md`.
+Defaults for styling live in `private/knowledge/visualisation_defaults.md`; global image rules in
+`private/prompts/render_rules.md`.
 
 ## Reviewing renders
 
@@ -173,6 +192,9 @@ For each render: **approve** it (locked, then delivered clean to the `Common` an
 folders) or **flag** it with a note (only that render is regenerated with the note, re-checked and
 shown again as a new version; older versions are kept).
 
+- Review page: `python -m render_agent review jobs\<job-id> --serve` opens a page on this computer
+  only (127.0.0.1) with each render beside its drawing and its drawing-check result, Approve and Flag
+  buttons, and **Continue** (regenerates flagged renders and delivers approved ones).
 - Command line: `python -m render_agent review jobs\<job-id>` lists the renders;
   `--approve <id>` or `--approve all`, and `--flag <id>="what to change"`.
 - Or put `review.txt` in the job folder and resume the job:
@@ -187,8 +209,9 @@ shown again as a new version; older versions are kept).
 - The job is SUCCEEDED when every render is approved. `report.html` and `manifest.json` in the job
   folder summarise what was delivered.
 
-## Not yet supported
+## Not built yet (deferred, 14 Oct 2026)
 
-- `@llm`: accepted without error but the configured model is still used; set `llm.per_stage` in config.yaml instead.
-
-- `selections.yaml` in the drop folder (named in the spec's folder contract): use `@select` lines for now.
+- Automatic inbox watching (`python -m render_agent watch`) and the Scheduled Task: start jobs by hand
+  with `run` (above).
+- Windows notifications and the 2-working-day reminder: check job status in the terminal output,
+  `jobs\<job-id>\error.json` and `report.html`.

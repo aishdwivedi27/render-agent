@@ -59,12 +59,18 @@ Status 14 Oct 2026: doctored images 6/6 caught (paid run; the swapped-order imag
 - [x] `output/folders.py`: Common + `Dwelling N` folders, shared renders copied into each dwelling, manifest; single house has no Common
 - [x] `report.html`, `manifest.json` (incl. knowledge-file hashes), compliance footer
 - [ ] `notify.py` (DEFERRED 14 Oct 2026): Windows toast on approval needed, review ready, failure; 2-working-day reminder
-- [ ] `scripts/install.ps1` on a clean host; Scheduled Task restart on failure
+- [x] `scripts/install.ps1`: private submodule check, checked pip steps, config/folders, doctor; tested on the laptop (`-SkipInstall`, missing-private case). Scheduled Task only once the watcher exists (deferred). Clean-host run is part of the exit gate
 - [x] Fault-injection tests for every row of the spec's error table (`tests/integration/test_error_table.py` maps each row to its test; watcher/notify rows marked deferred)
-- [ ] Final `docs/INSTRUCTIONS.md`: every instruction-file option and every default, checked against the code (living draft since 14 Oct 2026)
+- [x] Final `docs/INSTRUCTIONS.md`: every instruction-file option and every default, checked against the code (living draft since 14 Oct 2026)
 - [x] Wire `@llm` (per-job model choice) and read `selections.yaml` from the drop folder (both parsed/named but not applied yet; see docs/INSTRUCTIONS.md)
 
 **Exit gate:** 10 drops on the Windows host, including a restart mid-render, all end in the correct status; one flag regenerates exactly one render and every other file is byte-identical.
+
+Rehearsed on the Windows laptop 14 Oct 2026 (mock images, no spend): 10 drops in one batch all ended
+correctly (6 AWAITING_APPROVAL, broken/empty/password-protected FAILED to failed/, duplicate
+SKIPPED); a render killed mid-way resumed with the finished renders byte-identical and none redone;
+one flag made exactly one image call and changed no existing file. **Still to do: the same on the
+Windows host after a fresh `install.ps1`.**
 
 ## M5: Video (phase 2)
 

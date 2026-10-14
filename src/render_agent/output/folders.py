@@ -59,7 +59,7 @@ def export_approved(
         if not clean.is_file():
             raise FileNotFoundError(f"approved render {rid} v{approved[rid]} has no clean copy: {clean}")
         data = clean.read_bytes()
-        covers = [d for d in rules.covers(r) if d in dwellings] or [r["dwelling_id"]]
+        covers = [d for d in dwellings if d in rules.covers(r)] or [r["dwelling_id"]]  # D1-D2-D3 order
         name = file_name(r, covers, dwellings, rules)
         if name in used:  # two renders of the same view for the same dwellings
             name = name.replace(".png", f"_{safe_name(rid, 40)}.png")

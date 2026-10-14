@@ -74,3 +74,10 @@ def test_streetscape_goes_to_common_and_every_dwelling(tmp_path):
     assert (out / "Common" / "streetscape_D1-D2.png").is_file()
     assert (out / "Dwelling 1" / "streetscape_D1-D2.png").is_file()
     assert (out / "Dwelling 2" / "streetscape_D1-D2.png").is_file()
+
+
+def test_names_list_dwellings_in_order(tmp_path):
+    r = _r("P-SHARED-ENS", D3, "Ensuite", same=(D1, D2))  # representative dwelling is D3
+    _clean(tmp_path, r["render_id"], 1, b"e")
+    m = export_approved(tmp_path, [r], {r["render_id"]: 1}, [D1, D2, D3], VS)
+    assert m[0]["master"] == "output/Common/ensuite_D1-D2-D3.png" and m[0]["covers"] == [D1, D2, D3]
