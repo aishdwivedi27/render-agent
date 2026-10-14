@@ -1,0 +1,45 @@
+# Redacted copy: structure only. The real file is private and not in this repository.
+limits:
+  max_planned_renders_per_dwelling: <redacted>
+  regenerations_count_toward_limit: false
+  auto_retries_after_failed_drawing_check: <redacted>
+default_references:
+- <redacted>
+views:
+- id: <redacted>
+  label: <redacted>
+  include_when: <redacted>
+  min_dwellings: <redacted>
+  opt_out_directive: <redacted>
+  view_types:
+  - <redacted>
+  difference_words:
+  - <redacted>
+  references:
+  - <redacted>
+  notes: <redacted>
+ignore_differences_with:
+- <redacted>
+style_only_words:
+- <redacted>
+difference_contrast_words:
+- <redacted>
+ignore_differences_matching:
+- <redacted>
+subdivisions:
+  attached:
+    streetscape_front: true
+    front_closeup_per_dwelling: true
+    share_identical_views: true
+    difference_threshold: <redacted>
+  separate:
+    treat_as_independent_houses: true
+no_own_render:
+- <redacted>
+ignore_for_planning:
+- <redacted>
+output_folders:
+  shared_folder: <redacted>
+  dwelling_folder_pattern: <redacted>
+  copy_shared_into_each_dwelling: true
+  single_house_has_common_folder: false

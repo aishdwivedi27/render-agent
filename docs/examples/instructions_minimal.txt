@@ -1,0 +1,2 @@
+@streetscape=false
+Keep landscaping low so the whole façade is visible.

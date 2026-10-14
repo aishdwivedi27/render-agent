@@ -1,0 +1,137 @@
+# Redacted copy: structure only. The real file is private and not in this repository.
+_exterior:
+- <redacted>
+_colorbond:
+- <redacted>
+_front:
+- <redacted>
+items:
+  facade_wall:
+    label: <redacted>
+    default: <redacted>
+    schedule:
+    - <redacted>
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  feature_cladding:
+    label: <redacted>
+    default: <redacted>
+    schedule:
+    - <redacted>
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  entry_door_type:
+    label: <redacted>
+    default: <redacted>
+    schedule: []
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+      with:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  entry_door_material:
+    label: <redacted>
+    default: <redacted>
+    schedule:
+    - <redacted>
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+      with:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+    colour_palette:
+    - <redacted>
+  garage_door_type:
+    label: <redacted>
+    default: <redacted>
+    schedule: []
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  garage_door_finish:
+    label: <redacted>
+    default: <redacted>
+    schedule:
+    - <redacted>
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  window_frames:
+    label: <redacted>
+    default: <redacted>
+    schedule:
+    - <redacted>
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  roof_profile:
+    label: <redacted>
+    default: <redacted>
+    schedule: []
+    lines:
+      fields:
+      - <redacted>
+      words:
+      - <redacted>
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+  roof_colour:
+    label: <redacted>
+    default: <redacted>
+    schedule:
+    - <redacted>
+    lines:
+      fields: []
+      words: []
+    shown_by:
+    - <redacted>
+    options:
+    - <redacted>
+    colour_palette:
+    - <redacted>

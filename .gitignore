@@ -1,0 +1,28 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.env
+config.yaml
+inbox/
+jobs/
+failed/
+logs/
+*.lock
+.coverage
+htmlcov/
+
+# --- Private IP lives in private/, a submodule pointing at the private repository.
+# The main repo only records which commit of it to use; .githooks/pre-commit blocks its files. ---
+
+# --- Client-confidential drawing sets, delivered renders and answer keys ---
+/tests/fixtures/*/
+!/tests/fixtures/README.md
+*.pdf
+
+# --- Local editor and run settings (may hold client file paths) ---
+.vscode/launch.json
+.claude/settings.local.json

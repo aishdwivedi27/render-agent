@@ -1,0 +1,322 @@
+{
+  "type": "object",
+  "properties": {
+    "PROJECT": {
+      "type": "object",
+      "properties": {
+        "project_number": {
+          "type": "string"
+        },
+        "address": {
+          "type": "string"
+        },
+        "render_budget_per_dwelling": {
+          "type": "integer"
+        },
+        "dwelling_count": {
+          "type": "integer"
+        },
+        "overall_readiness": {
+          "type": "string",
+          "enum": [
+            "READY",
+            "REVIEW",
+            "NOT READY"
+          ]
+        }
+      },
+      "required": [
+        "project_number",
+        "address",
+        "render_budget_per_dwelling",
+        "dwelling_count",
+        "overall_readiness"
+      ],
+      "additionalProperties": false
+    },
+    "DWELLING_SUMMARY": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling_id": {
+            "type": "string"
+          },
+          "selected_render_count": {
+            "type": "integer"
+          },
+          "ready_count": {
+            "type": "integer"
+          },
+          "review_count": {
+            "type": "integer"
+          },
+          "not_ready_count": {
+            "type": "integer"
+          },
+          "overall_readiness": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "REVIEW",
+              "NOT READY"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dwelling_id",
+          "selected_render_count",
+          "ready_count",
+          "review_count",
+          "not_ready_count",
+          "overall_readiness",
+          "reason"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "RENDER_REQUIREMENTS": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "render_id": {
+            "type": "string"
+          },
+          "dwelling_id": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "REQUIRED EXTERIOR",
+              "CONDITIONAL EXTERIOR",
+              "KEY INTERIOR"
+            ]
+          },
+          "view_type": {
+            "type": "string",
+            "enum": [
+              "Front day",
+              "Front night",
+              "Front sunset",
+              "Side elevation",
+              "Rear elevation",
+              "Streetscape",
+              "Aerial/site context",
+              "Entry",
+              "Living",
+              "Kitchen",
+              "Family and meals",
+              "Bedroom",
+              "Ensuite",
+              "Bathroom",
+              "WIR",
+              "Hallway",
+              "Other interior",
+              "Other exterior",
+              "Front close-up",
+              "Laundry",
+              "Study"
+            ]
+          },
+          "location": {
+            "type": "string"
+          },
+          "identical_in_dwellings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "selection_rationale": {
+            "type": "string"
+          },
+          "architectural_facts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "materials_and_colours": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "site_context": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "permitted_visual_variation": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "uncertainties": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "readiness": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "REVIEW",
+              "NOT READY"
+            ]
+          },
+          "blockers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "render_id",
+          "dwelling_id",
+          "priority",
+          "view_type",
+          "location",
+          "identical_in_dwellings",
+          "selection_rationale",
+          "architectural_facts",
+          "materials_and_colours",
+          "site_context",
+          "permitted_visual_variation",
+          "uncertainties",
+          "readiness",
+          "blockers"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "OMITTED_VIEWS": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling_id": {
+            "type": "string"
+          },
+          "view_type": {
+            "type": "string"
+          },
+          "reason_omitted": {
+            "type": "string"
+          },
+          "budget_limited": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "dwelling_id",
+          "view_type",
+          "reason_omitted",
+          "budget_limited"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "CRITICAL_ARCHITECTURAL_BLOCKERS": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling_id": {
+            "type": "string"
+          },
+          "affected_view": {
+            "type": "string"
+          },
+          "blocker": {
+            "type": "string"
+          },
+          "why_it_matters": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dwelling_id",
+          "affected_view",
+          "blocker",
+          "why_it_matters"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "NON_CRITICAL_MISSING_INFORMATION": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling_id": {
+            "type": "string"
+          },
+          "missing_information": {
+            "type": "string"
+          },
+          "handling_rule": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dwelling_id",
+          "missing_information",
+          "handling_rule"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "PROJECT_TOTALS": {
+      "type": "object",
+      "properties": {
+        "selected_render_count": {
+          "type": "integer"
+        },
+        "ready_count": {
+          "type": "integer"
+        },
+        "review_count": {
+          "type": "integer"
+        },
+        "not_ready_count": {
+          "type": "integer"
+        },
+        "omitted_view_count": {
+          "type": "integer"
+        },
+        "maximum_allowed_render_count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "selected_render_count",
+        "ready_count",
+        "review_count",
+        "not_ready_count",
+        "omitted_view_count",
+        "maximum_allowed_render_count"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "PROJECT",
+    "DWELLING_SUMMARY",
+    "RENDER_REQUIREMENTS",
+    "OMITTED_VIEWS",
+    "CRITICAL_ARCHITECTURAL_BLOCKERS",
+    "NON_CRITICAL_MISSING_INFORMATION",
+    "PROJECT_TOTALS"
+  ],
+  "additionalProperties": false
+}

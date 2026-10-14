@@ -1,0 +1,599 @@
+{
+  "type": "object",
+  "properties": {
+    "PROJECT": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string"
+        },
+        "project_number": {
+          "type": "string"
+        },
+        "client": {
+          "type": "string"
+        },
+        "drawing_date": {
+          "type": "string"
+        },
+        "drawn_by": {
+          "type": "string"
+        },
+        "revision_information": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "revision": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "date": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "revision",
+              "description",
+              "date"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "drawing_status_purpose": {
+          "type": "string"
+        },
+        "sheet_information": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "sheet": {
+                "type": "string"
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "sheet",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "construction_description": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "address",
+        "project_number",
+        "client",
+        "drawing_date",
+        "drawn_by",
+        "revision_information",
+        "drawing_status_purpose",
+        "sheet_information",
+        "construction_description"
+      ],
+      "additionalProperties": false
+    },
+    "SITE": {
+      "type": "object",
+      "properties": {
+        "total_site_area": {
+          "type": "string"
+        },
+        "lots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "dwelling_or_lot_id": {
+                "type": "string"
+              },
+              "lot_area": {
+                "type": "string"
+              },
+              "POS": {
+                "type": "string"
+              },
+              "site_coverage": {
+                "type": "string"
+              },
+              "soft_landscaping": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "dwelling_or_lot_id",
+              "lot_area",
+              "POS",
+              "site_coverage",
+              "soft_landscaping"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "total_soft_landscaping": {
+          "type": "string"
+        },
+        "boundaries_and_dimensions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "existing_trees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "proposed_trees": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "fencing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stormwater": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "driveways": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "paving": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "other_site_features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "total_site_area",
+        "lots",
+        "total_soft_landscaping",
+        "boundaries_and_dimensions",
+        "existing_trees",
+        "proposed_trees",
+        "fencing",
+        "stormwater",
+        "driveways",
+        "paving",
+        "other_site_features"
+      ],
+      "additionalProperties": false
+    },
+    "DWELLINGS": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling_id": {
+            "type": "string"
+          },
+          "overall_area": {
+            "type": "string"
+          },
+          "living_area": {
+            "type": "string"
+          },
+          "garage_area": {
+            "type": "string"
+          },
+          "porch_area": {
+            "type": "string"
+          },
+          "number_of_storeys": {
+            "type": "string"
+          },
+          "relationship_to_other_dwellings": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "dwelling_id",
+          "overall_area",
+          "living_area",
+          "garage_area",
+          "porch_area",
+          "number_of_storeys",
+          "relationship_to_other_dwellings"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "FLOOR_PLAN": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling_id": {
+            "type": "string"
+          },
+          "bedrooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bedroom_count": {
+            "type": "string"
+          },
+          "bathrooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ensuite": {
+            "type": "string"
+          },
+          "WIR": {
+            "type": "string"
+          },
+          "room_connections": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "kitchen": {
+            "type": "string"
+          },
+          "pantry": {
+            "type": "string"
+          },
+          "living_areas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dining_meals": {
+            "type": "string"
+          },
+          "family_areas": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "study": {
+            "type": "string"
+          },
+          "laundry": {
+            "type": "string"
+          },
+          "garage": {
+            "type": "string"
+          },
+          "porch": {
+            "type": "string"
+          },
+          "deck": {
+            "type": "string"
+          },
+          "other_identifiable_spaces": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "important_dimensions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "dwelling_id",
+          "bedrooms",
+          "bedroom_count",
+          "bathrooms",
+          "ensuite",
+          "WIR",
+          "room_connections",
+          "kitchen",
+          "pantry",
+          "living_areas",
+          "dining_meals",
+          "family_areas",
+          "study",
+          "laundry",
+          "garage",
+          "porch",
+          "deck",
+          "other_identifiable_spaces",
+          "important_dimensions"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "EXTERNAL_ARCHITECTURE": {
+      "type": "object",
+      "properties": {
+        "roof_type": {
+          "type": "string"
+        },
+        "roof_pitch": {
+          "type": "string"
+        },
+        "eaves": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "windows": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "garage_doors": {
+          "type": "string"
+        },
+        "cladding": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "facade_elements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "other_explicit_external_features": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "roof_type",
+        "roof_pitch",
+        "eaves",
+        "windows",
+        "doors",
+        "garage_doors",
+        "cladding",
+        "facade_elements",
+        "other_explicit_external_features"
+      ],
+      "additionalProperties": false
+    },
+    "MATERIALS_AND_COLOURS": {
+      "type": "object",
+      "properties": {
+        "schedule_as_documented": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "item": {
+                "type": "string"
+              },
+              "colour": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "item",
+              "colour"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schedule_as_documented"
+      ],
+      "additionalProperties": false
+    },
+    "ELEVATIONS": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "elevation": {
+            "type": "string"
+          },
+          "height_information": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "facade_elements": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "boundary_conditions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "roof_information": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "cladding_information": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "other_information": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "elevation",
+          "height_information",
+          "openings",
+          "facade_elements",
+          "boundary_conditions",
+          "roof_information",
+          "cladding_information",
+          "other_information"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "LANDSCAPING": {
+      "type": "object",
+      "properties": {
+        "documented_items": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "planting_information": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "tree_information": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "surface_treatments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "other_landscaping_information": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "documented_items",
+        "planting_information",
+        "tree_information",
+        "surface_treatments",
+        "other_landscaping_information"
+      ],
+      "additionalProperties": false
+    },
+    "UNCERTAINTIES": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "DWELLING_RELATIONSHIPS": {
+      "type": "object",
+      "properties": {
+        "number_of_dwellings": {
+          "type": "string"
+        },
+        "similarities": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "differences": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "mirrored_relationships": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "repeated_elements": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "other_documented_relationships": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "number_of_dwellings",
+        "similarities",
+        "differences",
+        "mirrored_relationships",
+        "repeated_elements",
+        "other_documented_relationships"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "PROJECT",
+    "SITE",
+    "DWELLINGS",
+    "FLOOR_PLAN",
+    "EXTERNAL_ARCHITECTURE",
+    "MATERIALS_AND_COLOURS",
+    "ELEVATIONS",
+    "LANDSCAPING",
+    "DWELLING_RELATIONSHIPS",
+    "UNCERTAINTIES"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,63 @@
+# Copy to config.yaml. Paths are relative to the install root (the folder holding this file).
+paths:
+  inbox: inbox
+  jobs: jobs
+  failed: failed
+  knowledge: private/knowledge
+  prompts: private/prompts
+  schemas: schemas
+  logs: logs
+
+watcher:
+  poll_seconds: 15
+  stable_seconds: 10          # size + mtime unchanged this long before a drop is claimed
+  min_free_disk_gb: 2
+
+llm:
+  provider: openai            # openai | anthropic
+  model: gpt-5.6-sol          # anthropic alternative: claude-sonnet-5-5
+  reasoning_effort: medium
+  max_output_tokens: 32000
+  timeout_seconds: 300
+  retries: 5
+  per_stage: {}               # e.g. {sheet_analysis: {provider: anthropic, model: claude-sonnet-5-5}}
+
+images:
+  provider: openai            # openai | muapi | mock
+  openai:
+    model: gpt-image-2        # or gpt-image-2.5-flare, gpt-image-2.5-sunburst
+    size: 1536x1024
+    quality: high
+  muapi:
+    edit_model: nano-banana-2-edit
+    generate_model: nano-banana-2
+    timeout_seconds: 600
+  references_per_render: 3
+  concurrency: 2
+  retries: 5
+
+planning:
+  max_planned_renders_per_dwelling: 16   # hard limit; see knowledge/view_set.yaml
+  auto_retries_after_failed_check: 1
+  render_review_views: true              # render views marked REVIEW (flagged in the report)
+
+gate:
+  approval_required: true                # always on (decision 12 Oct 2026)
+  reminder_after_working_days: 2
+
+drawing_check:
+  enabled: true
+  strictness: standard                   # standard | strict
+
+ingest:
+  page_dpi: 200
+  max_pdf_mb: 200
+
+review:
+  host: 127.0.0.1
+  port: 8765
+  open_browser: true
+
+notify:
+  windows_toast: true
+  email: {enabled: false, smtp_host: "", smtp_port: 587, from: "", to: []}

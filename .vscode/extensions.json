@@ -1,0 +1,10 @@
+{
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "charliermarsh.ruff",
+    "anthropic.claude-code",
+    "redhat.vscode-yaml",
+    "tomoki1207.pdf"
+  ]
+}

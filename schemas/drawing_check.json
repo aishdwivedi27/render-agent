@@ -1,0 +1,67 @@
+{
+  "type": "object",
+  "properties": {
+    "render_id": {
+      "type": "string"
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "check": {
+            "type": "string",
+            "enum": [
+              "extra_openings",
+              "missing_openings",
+              "opening_positions",
+              "roof_form",
+              "storeys",
+              "colour_schedule",
+              "dwelling_identity",
+              "other"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "enum": [
+              "pass",
+              "fail",
+              "unsure"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "check",
+          "result",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "overall": {
+      "type": "string",
+      "enum": [
+        "pass",
+        "fail",
+        "unsure"
+      ]
+    },
+    "fix_instructions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "render_id",
+    "checks",
+    "overall",
+    "fix_instructions"
+  ],
+  "additionalProperties": false
+}

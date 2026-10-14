@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(mypy:*)",
+      "Bash(python -m render_agent doctor)",
+      "Bash(python -m render_agent run:* --dry-run)",
+      "Bash(python scripts/check_no_fixture_refs.py)",
+      "Bash(git status)",
+      "Bash(git diff:*)"
+    ],
+    "deny": [
+      "Read(.env)",
+      "Edit(.env)",
+      "Edit(tests/fixtures/**/*.pdf)"
+    ]
+  }
+}

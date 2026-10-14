@@ -1,0 +1,20 @@
+{
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": ["tests"],
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": { "source.organizeImports": "explicit", "source.fixAll": "explicit" }
+  },
+  "files.eol": "\n",
+  "files.exclude": { "**/__pycache__": true, ".pytest_cache": true, ".ruff_cache": true, ".mypy_cache": true },
+  "yaml.schemas": {},
+  "json.schemas": [
+    { "fileMatch": ["jobs/*/sheets/*.json"], "url": "./schemas/sheet_analysis.json" },
+    { "fileMatch": ["jobs/*/evidence.json"], "url": "./schemas/evidence.json" },
+    { "fileMatch": ["jobs/*/house_specification.json"], "url": "./schemas/house_spec.json" },
+    { "fileMatch": ["jobs/*/checklist.json"], "url": "./schemas/checklist.json" }
+  ]
+}

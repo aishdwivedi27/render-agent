@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "properties": {
+    "prompts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "render_id": { "type": "string" },
+          "scene": { "type": "string" },
+          "camera": { "type": "string" },
+          "lighting": { "type": "string" },
+          "people_and_vehicles": { "type": "string" },
+          "must_preserve": { "type": "array", "items": { "type": "string" } },
+          "must_avoid": { "type": "array", "items": { "type": "string" } },
+          "reference_view_ids": { "type": "array", "items": { "type": "string" } },
+          "aspect": { "type": "string", "enum": ["landscape", "portrait", "square"] },
+          "visualisation_choices": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["render_id", "scene", "camera", "lighting", "people_and_vehicles", "must_preserve", "must_avoid", "reference_view_ids", "aspect", "visualisation_choices"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["prompts"],
+  "additionalProperties": false
+}

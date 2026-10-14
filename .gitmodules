@@ -1,0 +1,3 @@
+[submodule "private"]
+	path = private
+	url = https://github.com/aishdwivedi27/render-agent-private.git

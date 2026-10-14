@@ -1,0 +1,9 @@
+@select roof_colour=Monument
+@select window_frames=Aluminium, black
+@select entry_door=hinged, painted
+@select garage_door_finish=Monument
+@night=true
+@max_images=12
+Late-afternoon summer light with soft shadows.
+No people or cars in the exterior views.
+Interiors bright and minimal, light oak floors, white stone benchtops in the kitchen.

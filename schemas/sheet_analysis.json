@@ -1,0 +1,211 @@
+{
+  "type": "object",
+  "properties": {
+    "sheet_number": {
+      "type": "string"
+    },
+    "sheet_title": {
+      "type": "string"
+    },
+    "sheet_type": {
+      "type": "string",
+      "enum": [
+        "site_plan",
+        "floor_plan",
+        "elevations",
+        "sections",
+        "perspective_3d",
+        "colour_schedule",
+        "cover",
+        "details",
+        "mixed",
+        "other"
+      ]
+    },
+    "scale": {
+      "type": "string"
+    },
+    "dwellings_referenced": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "views": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "view_id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "view_kind": {
+            "type": "string",
+            "enum": [
+              "elevation",
+              "floor_plan",
+              "site_plan",
+              "section",
+              "perspective_3d",
+              "schedule",
+              "legend",
+              "other"
+            ]
+          },
+          "facing": {
+            "type": "string",
+            "enum": [
+              "front_street",
+              "rear",
+              "left_side",
+              "right_side",
+              "top_down",
+              "perspective",
+              "not_applicable",
+              "unknown"
+            ]
+          },
+          "dwellings_shown": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "bbox": {
+            "type": "object",
+            "properties": {
+              "x0": {
+                "type": "number"
+              },
+              "y0": {
+                "type": "number"
+              },
+              "x1": {
+                "type": "number"
+              },
+              "y1": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x0",
+              "y0",
+              "x1",
+              "y1"
+            ],
+            "additionalProperties": false
+          },
+          "description": {
+            "type": "string"
+          },
+          "facade_left_to_right": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "dwelling": {
+                  "type": "string"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "dwelling",
+                "items"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "view_id",
+          "label",
+          "view_kind",
+          "facing",
+          "dwellings_shown",
+          "bbox",
+          "description",
+          "facade_left_to_right"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "dwelling": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "project",
+              "site",
+              "landscaping",
+              "floor_plan",
+              "roof",
+              "walls_cladding",
+              "windows_doors",
+              "garage",
+              "colours_materials",
+              "dimensions",
+              "heights",
+              "fencing",
+              "driveways_paving",
+              "relationships",
+              "other"
+            ]
+          },
+          "fact": {
+            "type": "string"
+          },
+          "source_text": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "high",
+              "medium",
+              "low"
+            ]
+          }
+        },
+        "required": [
+          "dwelling",
+          "category",
+          "fact",
+          "source_text",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "sheet_number",
+    "sheet_title",
+    "sheet_type",
+    "scale",
+    "dwellings_referenced",
+    "views",
+    "findings",
+    "uncertainties"
+  ],
+  "additionalProperties": false
+}

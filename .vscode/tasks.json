@@ -1,0 +1,10 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    { "label": "test", "type": "shell", "command": "pytest", "group": { "kind": "test", "isDefault": true } },
+    { "label": "lint", "type": "shell", "command": "ruff check . ; ruff format --check ." },
+    { "label": "typecheck", "type": "shell", "command": "mypy src" },
+    { "label": "doctor", "type": "shell", "command": "python -m render_agent doctor" },
+    { "label": "fixture leak check", "type": "shell", "command": "python scripts/check_no_fixture_refs.py" }
+  ]
+}

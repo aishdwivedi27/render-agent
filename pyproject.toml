@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "render-agent"
+version = "0.1.0"
+description = "Drawing-to-render agent: architectural PDF in, checked and reviewed renders out."
+requires-python = ">=3.12"
+dependencies = [
+  "pymupdf>=1.24",
+  "pillow>=10.4",
+  "openai>=1.60",
+  "anthropic>=0.40",
+  "jsonschema>=4.23",
+  "tenacity>=9.0",
+  "pyyaml>=6.0",
+  "python-dotenv>=1.0",
+  "pydantic>=2.8",
+  "win11toast>=0.35; sys_platform == 'win32'",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3", "pytest-cov>=5.0", "ruff>=0.6", "mypy>=1.11", "types-PyYAML", "pip-tools>=7.4"]
+
+[project.scripts]
+render-agent = "render_agent.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+markers = [
+  "paid: makes real API calls (skipped unless RUN_PAID_TESTS=1)",
+  "windows: needs a Windows host",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "PTH", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true

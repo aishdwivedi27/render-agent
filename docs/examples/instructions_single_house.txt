@@ -1,0 +1,6 @@
+@select feature_cladding=Vertical timber-look cladding (e.g. Linea / Stria profile)
+@select entry_door=pivot, timber
+@views=Front day,Kitchen,Living,Main bedroom
+Morning light.
+One adult walking to the front door in the front view.
+Kitchen styled with a fruit bowl and two bar stools, nothing else on the benches.

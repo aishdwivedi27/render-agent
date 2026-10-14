@@ -1,0 +1,11 @@
+#!/bin/sh
+# Main repository guard: never commit private IP or client files here.
+# private/ must be a submodule (one "gitlink" entry), never its files; no PDFs; no .env or config.yaml.
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^private/|\.pdf$|(^|/)\.env$|^config\.yaml$|^jobs/|^logs/' )
+if [ -n "$bad" ]; then
+  echo "pre-commit: refusing to commit private or client files to the main repository:" >&2
+  echo "$bad" | sed 's/^/  /' >&2
+  echo "Private files belong in the private/ submodule (commit them there)." >&2
+  exit 1
+fi
+exit 0
