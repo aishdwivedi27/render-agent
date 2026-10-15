@@ -5,7 +5,15 @@ How to steer a job, and what the agent does when you don't. Kept in step with th
 
 ## How to use it
 
-Start jobs by hand from the install folder (the automatic inbox watcher comes later):
+**Designers (desktop app, from M5):** put the PDF (with its `.txt` or in a folder with
+`instructions.txt` / `selections.yaml`) into `Desktop\RenderAgent\Input`, or drag it onto the app
+window. On the Home screen press Refresh, then **Start**. Every `@directive` below is also an
+option on the Start step, so you can set night view, streetscape, materials and so on there
+instead of writing a file. After Start the original moves to `Desktop\RenderAgent\History` and the
+renders arrive in `Desktop\RenderAgent\Output\<input name>`. To retry a failed or flagged job, press
+Retry in the app; never put the files back in Input.
+
+**Developers (CLI):** start jobs by hand from the repo:
 
 ```text
 python -m render_agent run "drawings\house_a.pdf"                 one job
@@ -89,7 +97,7 @@ Tips:
 | `@max_images` | `@max_images=8` | Lowers the planned renders per dwelling. Cannot raise it | 16 per dwelling (a limit, not a target) |
 | `@views` | `@views=Kitchen,Living` | Only these views (the front view is always kept) | Full standard view set |
 | `@dwellings` | `@dwellings=DWELLING 1` | Only views that show these dwellings (a streetscape is not added automatically, but one already planned is kept because it shows them too) | All dwellings |
-| `@provider` | `@provider=muapi` | Image provider for this job: `openai`, `muapi` or `mock` | `images.provider` in config.yaml (openai, gpt-image-2) |
+| `@provider` | `@provider=muapi` | Image provider for this job: `openai`, `muapi` or `mock`, only if listed in `images.enabled_providers` (a provider not enabled is an invalid directive, listed at the gate) | `images.provider` in config.yaml (openai, gpt-image-2) |
 | `@llm` | `@llm=sonnet` | Language model for this whole job: a name from `llm.choices` in config.yaml (`gpt`, `sonnet`). An unknown name is ignored and listed at the gate | `llm` in config.yaml (gpt-5.6-sol) |
 | `@dry_run` | `@dry_run=true` | Mock images, no drawing check, no spend | Real (paid) run after approval |
 
@@ -187,6 +195,17 @@ Defaults for styling live in `private/knowledge/visualisation_defaults.md`; glob
 
 ## Reviewing renders
 
+**In the app (designers):** the Review screen shows each render beside its drawing and check
+result. To flag one, pick what is wrong (wrong material/colour, extra opening, missing opening,
+wrong roof/storeys, wrong framing/view, other) and say the correction in your own words; only that
+render is redone with your correction. If a fact about the house itself is wrong (at the approval
+step or in review), correct it once: it is saved for this job (`corrections.json`), used for every
+later render of the job and listed in `report.html`. Corrections never change the agent's general
+rules; tick "suggest as a general rule" if you think it should, and use Help → "Export feedback"
+when asked to hand feedback back on a pen drive.
+
+**Developers:**
+
 When the renders are ready the job waits at AWAITING_REVIEW. Every image carries a DRAFT overlay.
 For each render: **approve** it (locked, then delivered clean to the `Common` and `Dwelling N`
 folders) or **flag** it with a note (only that render is regenerated with the note, re-checked and
@@ -209,9 +228,22 @@ shown again as a new version; older versions are kept).
 - The job is SUCCEEDED when every render is approved. `report.html` and `manifest.json` in the job
   folder summarise what was delivered.
 
+## Enabling another image provider
+
+The first release offers OpenAI images only. MuAPI is in the program but hidden. To turn it on for a
+laptop (no reinstall from scratch, no code change):
+
+1. Run the new `Setup.exe` over the existing install (copy it off the pen drive first).
+2. On the components page, tick **muapi-cli** (it is off by default).
+3. On the key page, enter the MUAPI key; the installer tests it with a free check.
+4. Add `muapi` to `images.enabled_providers` in `config.yaml` (in `%LOCALAPPDATA%\RenderAgent`).
+5. Open the app: Settings now shows MuAPI with its key status, and the Start step offers it as the
+   image provider. A provider appears only when it is enabled and has a valid key.
+
+Config, keys, jobs and the Desktop folders are kept by the upgrade.
+
 ## Not built yet (deferred, 14 Oct 2026)
 
-- Automatic inbox watching (`python -m render_agent watch`) and the Scheduled Task: start jobs by hand
-  with `run` (above).
-- Windows notifications and the 2-working-day reminder: check job status in the terminal output,
-  `jobs\<job-id>\error.json` and `report.html`.
+- Automatic start from Input (`watch`): phase 2. Designers press Start in the app; developers use `run`.
+- Windows notifications and the 2-working-day reminder: phase 2. Job status, errors and
+  `report.html` are shown in the app (developers: terminal output and `jobs\<job-id>\error.json`).

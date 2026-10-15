@@ -10,6 +10,26 @@ checked against the drawings and reviewed by a designer, filed by dwelling.
 Status: **scaffold**. Schemas, prompts, knowledge rules, fixtures, tests and the package layout
 are in place; stages are implemented milestone by milestone.
 
+## For designers: install
+
+1. Copy `Setup.exe` from the USB pen drive to your laptop (for example to Downloads), then run it
+   from there. If Windows shows a blue "Windows protected your PC" box, choose **More info → Run
+   anyway** (the program is not code-signed yet).
+2. On the key page, enter the API key you were given. The installer checks it for free before it
+   continues; installation only finishes with a working key.
+3. Open **Render Agent** from the desktop icon or the Start menu.
+4. Your folders are on the Desktop in `RenderAgent`:
+   - **Input**: put a drawing PDF (or a folder of PDFs with `instructions.txt`) here, or drag it
+     onto the app window. Press Refresh, then Start.
+   - **History**: after Start, the original files move here, in a folder named with the date and
+     time, with a `started.txt` saying who started it and where the renders are.
+   - **Output**: one folder per job. `Draft` has every version with a DRAFT mark; `Final` has the
+     approved images by dwelling; `report.html` summarises the job.
+5. To replace a key later, use Settings in the app. To update, run the new `Setup.exe` the same way;
+   your keys, jobs and folders are kept. Uninstalling leaves `Desktop\RenderAgent` in place.
+
+If your Desktop syncs to OneDrive, the app will suggest excluding `Desktop\RenderAgent` from sync.
+
 ## Private files (not in the repository)
 
 The prompts (`private/prompts/`), the rules (`private/knowledge/`), the original workflow (`private/reference/`) and the
@@ -66,30 +86,25 @@ If PowerShell blocks the activation script, run
 `.vscode/settings.json` points VS Code at `.venv\Scripts\python.exe` (Windows). On macOS or Linux,
 pick `.venv/bin/python` with **Python: Select Interpreter**.
 
-## Install on the Windows host (from M4)
+## Developer: build the installer (from M6)
 
 ```powershell
-git clone <repo> C:\RenderAgent    # or copy the release zip there
-cd C:\RenderAgent
-Set-ExecutionPolicy -Scope Process Bypass
-.\scripts\install.ps1
-notepad .env                        # add API keys
+.\scripts\build_installer.ps1   # PyInstaller folder + Inno Setup Setup.exe, version from pyproject.toml
 ```
 
-`install.ps1` creates the venv, installs pinned dependencies, creates `config.yaml` and the
-`inbox`, `jobs`, `failed` and `logs` folders, registers the `RenderAgent` Scheduled Task (start at
-logon, restart on failure) and runs `doctor`. Re-run it to upgrade; jobs, `config.yaml` and
-`.env` are never overwritten.
+`scripts/install.ps1` (venv, pinned dependencies, config and folders, doctor) stays as a developer
+check; designers get the M6 `Setup.exe` instead. Launch the desktop app from the repo with
+`python -m render_agent app` (from M5).
 
-## Using it
+## Using it (developers, CLI)
 
-1. Drop a PDF (or a folder of PDFs) into `inbox\`. Optional: an `instructions.txt` beside it,
-   for example:
+1. Run `python -m render_agent run <pdf or folder>` (or `--batch <folder>`). Optional: an
+   `instructions.txt` beside the PDF, for example:
    ```
    @night=true
    Include a family on the driveway in the front view.
    ```
-2. Approve the plan and materials when notified (local review page, or drop a file named
+2. Approve the plan and materials (`approve` command, or drop a file named
    `APPROVE` into the job folder).
 3. Review the thumbnails; flag any render with a note to regenerate only that one.
 4. Collect the renders from `jobs\<job>\output\Dwelling N\` (each folder is a complete set).

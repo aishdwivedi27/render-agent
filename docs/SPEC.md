@@ -1,13 +1,19 @@
+Last synced with the live page: 12 Oct 2026
+
 # Drawing-to-Render Agent: Specification (developer copy)
 
-Agreed 12 Oct 2026. The live, authoritative version is the Claude Docs page
-https://claude.ai/code/artifact/29555f11-8ad7-4134-838e-0d2553f96142. If they differ, the live page
-wins; update this copy and say so in the commit message.
+Agreed 12 Oct 2026; amended 14 and 15 Oct 2026 (§12). The live, authoritative version is the Claude
+Docs page https://claude.ai/code/artifact/29555f11-8ad7-4134-838e-0d2553f96142. If they differ, the
+live page wins; update this copy and say so in the commit message. The live page cannot be read from
+this repo, so at every milestone exit gate Claude Code lists the sections of this file the milestone
+changed and asks the owner to confirm both copies match. The "Last synced" date above changes only
+after that confirmation, and a gate is not passed until it is given (decision 15 Oct 2026).
 
 ## 1. Purpose and scope
 
-The agent turns a drawing set into a consistent set of photorealistic renders. Someone drops a
-Revit-exported PDF (optionally with an instructions `.txt`) into a watched folder on a Windows host.
+The agent turns a drawing set into a consistent set of photorealistic renders. A designer puts a
+Revit-exported PDF (optionally with an instructions `.txt`) into `Desktop\RenderAgent\Input` on their
+own Windows 10/11 laptop and starts the job from the Render Agent desktop app.
 The agent extracts the documented architecture and materials, plans which views to render, renders
 them with an image model, checks each render against the drawings, and hands thumbnails to a
 designer for review. Every image must show the building the drawings describe.
@@ -25,22 +31,25 @@ designer for review. Every image must show the building the drawings describe.
 | User | Needs | Use |
 | --- | --- | --- |
 | Builder / developer (primary) | Marketing renders matching the approved plans | Drops the PDF, collects renders |
-| Building designer | Visual check before issue; resolves gaps | Approves the plan, reviews thumbnails |
+| Building designer (in-house, non-technical) | Visual check before issue; resolves gaps; no terminal | Runs the desktop app on their own laptop: starts jobs, approves the plan, reviews thumbnails, corrects facts |
 | Sales / real-estate agent | Front hero images (night on request), later video | Receives a dwelling's folder |
 | Operator | Cost control, failure visibility, prompt tuning | Edits config and knowledge files, reads logs |
 
-Journey: drop PDF (+ optional `instructions.txt` / `selections.yaml`) into `inbox/` → agent reads
-the drawings, plans views from the standard view set, reads materials from the PDF → **approval
-gate (always on)**: designer confirms views and materials and fills gaps → render → drawing check
-(one automatic regeneration on fail) → **thumbnail review**: designer approves or flags individual
-renders with a note; only flagged renders are regenerated → final set filed by dwelling.
-A failed job lands in `failed/` with a plain-English `error.json`.
+Journey: put a PDF (+ optional `instructions.txt` / `selections.yaml`) into `Desktop\RenderAgent\Input`
+→ press **Start** on the app's Home screen (options set there) → the original moves to `History` →
+agent reads the drawings, plans views from the standard view set, reads materials from the PDF →
+**approval gate (always on)**, Approval screen: designer confirms views and materials, fills gaps and
+corrects facts → render (Progress screen) → drawing check (one automatic regeneration on fail) →
+**thumbnail review**, Review screen: designer approves or flags individual renders with a category and
+a note; only flagged renders are regenerated → final set in `Output\<input name>\Final`, filed by
+dwelling. A failed job shows its plain-English `error.json` text in the app, with a Retry button.
+Developers can still drive every step from the CLI.
 
 ## 3. Functional requirements
 
 | ID | Requirement |
 | --- | --- |
-| FR-1 | Watch a folder on the host's local disk; accept a loose PDF or a sub-folder of PDFs (2D set plus optional 3D views) |
+| FR-1 | Accept input from `Desktop\RenderAgent\Input`: a loose PDF, a PDF with a same-name `.txt`, or a sub-folder of PDFs (2D set plus optional 3D views) + `instructions.txt` / `selections.yaml`. No folder watcher: Home lists waiting items (Refresh button); a job starts only when the designer presses Start. A PDF dragged onto the app window is placed in Input and goes through the same Start step. On Start the inputs are copied into the job's working folder, each copy verified by sha256, then the originals move to `History` (§8) |
 | FR-2 | Read an optional `.txt` with free-text instructions and `@key=value` directives |
 | FR-3 | Extract evidence from both the PDF text layer and the page images, per sheet |
 | FR-4 | Produce a House Specification as the single source of truth, with "NOT FOUND" for gaps |
@@ -52,9 +61,13 @@ A failed job lands in `failed/` with a plain-English `error.json`.
 | FR-10 | State on every output that renders are conceptual with no compliance claim |
 | FR-11 | Materials (façade e.g. Hebel, doors, windows, roof, colours) are read from the PDF; the designer confirms at the gate and chooses only what the PDF does not specify |
 | FR-12 | Drawing check after each render: fail on a window/door where the drawing has none, a missing documented opening, or wrong roof form, storeys or colours. Opening sizes and proportions may differ slightly (artist's impression) |
-| FR-13 | Thumbnail review: approve or flag each render with a note; only flagged renders are regenerated, with the note added to the prompt |
+| FR-13 | Thumbnail review: approve or flag each render with a category (wrong material/colour, extra opening, missing opening, wrong roof/storeys, wrong framing/view, other) and a correction in the designer's words; only flagged renders are regenerated, with the correction added to the prompt |
 | FR-14 | At most 16 planned renders per dwelling: a limit, not a target. Regenerations are outside the 16 and tracked separately |
-| FR-15 | Run on a Windows host separate from the development laptop |
+| FR-15 | Run on each designer's own Windows 10/11 laptop, running that designer's own jobs |
+| FR-16 | Desktop app: FastAPI + uvicorn on 127.0.0.1 (free port chosen at start-up) in a native pywebview (Edge WebView2) window; static HTML/CSS/JS served by FastAPI, no Node build, no CDN. It calls the pipeline modules directly, never the CLI; one job renders at a time, others queue; `state.json` is the single source of truth |
+| FR-17 | API keys entered on the installer's key page and in Settings, validated with a no-cost authentication call, stored in Windows Credential Manager (`keyring`); no job starts without a valid key for every enabled provider |
+| FR-18 | Image providers switchable without code changes; only those in `images.enabled_providers` are offered |
+| FR-19 | Corrections at three levels: a render flag (category + correction) changes that render's prompt; a job correction (gate or review) is saved to `corrections.json`, overrides the House Specification for the rest of that job and is shown in `report.html`; every flag and correction is appended to the feedback store for developer review. The app never edits `knowledge/` or `prompts/`; correction text is data, quoted into labelled prompt blocks, and cannot change directives, limits or providers |
 
 ## 4. Standard view set (authoritative data: `knowledge/view_set.yaml`)
 
@@ -125,7 +138,9 @@ output/
   report.html  manifest.json
 ```
 Regenerating a shared render replaces the master and every copy; `manifest.json` records copies.
-A single-house job has no `Common` folder.
+A single-house job has no `Common` folder. This is the job's working `output/`; for designers the
+approved clean images are delivered in the same `Common` / `Dwelling N` layout under
+`Output\<input name>\Final\` (§8).
 
 ## 5. Knowledge base and precedence
 
@@ -143,11 +158,11 @@ hashes in `manifest.json`. See `knowledge/README.md`.
 | 3 | Evidence | `evidence.json` | LLM, `schemas/evidence.json` |
 | 4 | House spec | `house_specification.json` | LLM, `schemas/house_spec.json` |
 | 5 | Checklist + selections | `checklist.json`, `checklist_validation.json`, `selections.json` | LLM then deterministic validator |
-| Gate | Approval (always on) | `approval.json` | Designer (page, `APPROVE` file or CLI) |
+| Gate | Approval (always on) | `approval.json`, `corrections.json` | Designer in the desktop app (Approval screen); developers: `APPROVE` file or CLI |
 | 6 | Prompts | `prompts/<render_id>.txt`, `references/<view_id>.png` | LLM scene text; code assembles |
 | 7 | Render | `output/<render_id>_vN.png` | gpt-image-2 (default) or MuAPI |
 | 8 | Drawing check | `checks/<render_id>_vN.json` | Vision LLM, `schemas/drawing_check.json` |
-| 9 | Review and report | `report.html`, `manifest.json`, `review.json`, dwelling folders | Local page on 127.0.0.1 |
+| 9 | Review and report | `report.html`, `manifest.json`, `review.json`, dwelling folders | Desktop app Review screen (127.0.0.1); developers: `review --serve` / CLI |
 
 **Prompt assembly (stage 6), in order:** fixed identity block from the spec (construction, roof and
 pitch, eaves, storeys, every colour-schedule line; identical in every prompt for that dwelling) →
@@ -168,7 +183,7 @@ landscaping, people, vehicles, sky. Fail → one automatic regeneration with fix
 second fail goes to review marked "Failed drawing check". Error or unsure → "Not checked".
 
 **Designer review (stage 9):** thumbnails grouped by dwelling beside their reference crop and check
-result; Approve / Flag + note; "Regenerate flagged" re-runs stages 6 to 8 for flagged IDs only;
+result; Approve / Flag + category + correction; "Regenerate flagged" re-runs stages 6 to 8 for flagged IDs only;
 results saved as `_v2`, `_v3`; approved renders are locked and exported without the DRAFT overlay. Fallback: `review.txt`, one line per
 flag (`<render_id>: <note>`).
 
@@ -186,25 +201,63 @@ One interface each: `llm.call_json(stage, prompt, images, schema)` and `images.P
 
 ## 8. Folder contract, directives, statuses
 
+Three roots, none with a hard-coded drive letter or user name (decision 15 Oct 2026). `config.py`
+resolves the install root separately from the working root; the Desktop is found with the Windows
+known-folder API.
+
 ```
-RenderAgent/      install root on the Windows host's local disk
-  inbox/          drop a PDF, or a folder of PDFs + instructions.txt / selections.yaml
+C:\Program Files\RenderAgent\       install root, read-only: program, knowledge/, prompts/, schemas/
+
+%LOCALAPPDATA%\RenderAgent\          working root (agent files; designers never need to open it)
+  config.yaml
   jobs/<id>/      input/ pages/ sheets/ references/ prompts/ checks/
-                  output/  Common/  Dwelling 1/ ...
-                  state.json  selections.json  approval.json  review.json  job.log
-  failed/         jobs that stopped, each with error.json
-  knowledge/      runtime rules
-  config.yaml  .env
+                  output/  clean/  Common/  Dwelling 1/ ...
+                  state.json  selections.json  approval.json  corrections.json
+                  review.json  error.json  job.log
+  feedback/       feedback.jsonl (every flag and correction, all jobs)
+  logs/
+
+Desktop\RenderAgent\                 designer folders, created on first launch
+  Input\          a PDF; a PDF + same-name .txt; or a sub-folder of PDFs + instructions.txt / selections.yaml
+  History\<YYYY-MM-DD HHMM> - <input name>\   originals moved here on Start + started.txt
+  Output\<input name>\
+                  Draft\       every render version with the DRAFT overlay (_v1, _v2 …, never overwritten)
+                  Final\       approved clean images only, in Common\ and Dwelling N\ (output/folders.py)
+                  report.html  links back to the matching History folder
 ```
 
-A file is claimed only after size and mtime are unchanged for `stable_seconds` (default 10);
-locked files are skipped until the next poll.
+Dev mode (running from the repo) keeps today's repo-relative layout: everything under the repo root.
+
+**Input.** Home lists the items waiting in Input with a Refresh button; there is no watcher. A job
+starts only when the designer presses Start. A PDF dragged onto the app window is copied into Input
+and then goes through the same Start step. An item still being copied or locked is not startable
+(Start refuses with a message).
+
+**Start.** (1) Copy the inputs into `jobs/<id>/input/`; (2) verify every copy by sha256 against its
+original; (3) move the originals to `History\<YYYY-MM-DD HHMM> - <input name>\` (local time of Start;
+if the name exists, append `-2`, `-3`); (4) write `started.txt` there: start date and time in plain
+words, Windows user name, the full Output folder path and the job ID. If the copy or the
+verification fails, the originals stay in Input and the app shows a plain-English error. A PDF
+already processed (same sha256) opens the existing job; the designer may choose "Start anyway".
+
+**Output.** `Output\<input name>\`; if it exists, append ` (YYYY-MM-DD)`, then ` (YYYY-MM-DD-2)`.
+Every Output and History file is written atomically (`util.fs.atomic_write_*`), so a sync lock can
+never leave a half-written file. The job's working state lives only in the working root: moving or
+deleting Output or History folders never breaks a job.
+
+**Retry.** A failed or flagged job is retried with a button that resumes the existing job; designers
+never re-drop files.
+
+**OneDrive.** If the Desktop is redirected to OneDrive, Home shows a one-time warning suggesting
+`Desktop\RenderAgent` be excluded from sync.
+
+Each directive below is also an option on the Start step.
 
 | Directive | Example | Effect |
 | --- | --- | --- |
 | `@night` | `@night=true` | Adds the optional front night view (plain words work too) |
 | `@streetscape` | `@streetscape=false` | Omits the streetscape (included by default for 2+ dwellings) |
-| `@provider` | `@provider=muapi` | Image provider for this job |
+| `@provider` | `@provider=muapi` | Image provider for this job (enabled providers only; any other is an invalid directive) |
 | `@llm` | `@llm=sonnet` | Language model for this job |
 | `@dwellings` | `@dwellings=DWELLING 1` | Only these dwellings |
 | `@views` | `@views=Front day,Rear day` | Only these view types |
@@ -216,20 +269,22 @@ Statuses: AWAITING_APPROVAL, RENDERING, AWAITING_REVIEW, SUCCEEDED (every render
 
 ## 9. Error handling
 
-Rules: (1) fail small: call → render → stage → job, never the watcher; (2) never lose work: atomic
+Rules: (1) fail small: call → render → stage → job, never the app; (2) never lose work: atomic
 writes, versioned renders; (3) resume, don't restart: idempotent checkpointed stages; (4) no silent
 failures: every error logged with a code, job-stopping errors write `error.json` (what happened,
-likely cause, what to do); (5) tell a person: Windows notification on approval needed, review ready,
-failure; (6) retry only what can succeed; (7) spend safely: budget check before every paid call;
+likely cause, what to do), shown in the app as its what_happened / what_to_do text, never a stack
+trace; (5) tell a person: the app's Home and job screens show approval needed, review ready and
+failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend safely: budget check before every paid call;
 (8) validate everything that crosses a boundary.
 
 | Area | Failure | Behaviour |
 | --- | --- | --- |
-| Input | Not a PDF, empty, won't open | `failed/` + error.json "not a readable PDF" |
-| Input | Password-protected | `failed/`; ask for an unlocked copy |
+| Input | Not a PDF, empty, won't open | Job FAILED + error.json "not a readable PDF", shown in the app |
+| Input | Password-protected | Job FAILED; app asks for an unlocked copy |
 | Input | Scan with no text layer | Continue on images only; lower confidence; said at the gate |
-| Input | Still copying / locked | Skip until stable; retry every poll |
-| Input | Same PDF dropped twice | File hash; link to the existing job, no reprocessing |
+| Input | Item in Input still copying or locked | Shown as "still copying"; Start refused with a message until it is stable (size and mtime unchanged for `stable_seconds`) and readable |
+| Input | Same PDF started twice | sha256 at Start; app opens the existing job; "Start anyway" makes a new job |
+| Input | Copy verification failed at Start | Originals stay in Input; partial job copy removed; plain-English error on Home |
 | Input | No elevation or no floor plan | Affected views NOT READY with reason; job continues |
 | Input | Unknown/invalid directive | Ignored, listed at the gate; free text still used |
 | Extraction | Invalid JSON / schema break | One repair retry quoting the error; then stage fails, raw output saved |
@@ -244,43 +299,85 @@ failure; (6) retry only what can succeed; (7) spend safely: budget check before 
 | Rendering | Fails drawing check | One automatic regeneration; second fail → review "Failed drawing check" |
 | Rendering | Drawing check errors or unsure | Review "Not checked"; never silently passed |
 | Review | Designer flags a render | Only that render regenerated; counted and costed |
-| Account | Key missing/invalid/expired | Job PAUSES with "update the key in .env"; resumes when fixed |
-| Account | Out of credit / quota / spending limit (LLM or images; e.g. `insufficient_quota`, "credit balance is too low", HTTP 402) | Never retried. Job PAUSES with code OUT_OF_CREDIT: which provider, the provider's message, where to top up, and the resume command; finished stages and renders kept and never paid for twice |
-| System | Disk below 2 GB free | No new jobs; running jobs pause; notification |
-| System | Crash, reboot, power loss | Scheduled Task restarts the agent; jobs resume |
-| System | Second agent instance | Lock file stops it |
-| System | Network down | Calls pause and retry; watcher keeps queueing |
-| People | Approval/review unanswered 2 working days | Reminder; never auto-approved |
+| Corrections | Correction text tries to act as an instruction (directive, limit, provider) | Treated as data only, quoted into a labelled prompt block; no behaviour change; shown at the gate/review as entered |
+| Corrections | Feedback store not writable | Warning in the app and logged; the correction still applies to the job; job continues |
+| Corrections | Export feedback fails (disk, permissions) | Plain-English message; no partial zip left (atomic write) |
+| Account | Key missing/invalid/expired | Job PAUSES with "replace the key in Settings" (developers: `.env`); Retry resumes when fixed |
+| Account | Invalid or missing key at install or first run | Installer key page / first-run check fails with a plain message (no-cost authentication call); no job can start until every enabled provider has a valid key |
+| Account | Provider enabled without a key | Provider hidden in Settings and Start; Home names the provider and says to add its key; no job uses it |
+| Account | Out of credit / quota / spending limit (LLM or images; e.g. `insufficient_quota`, "credit balance is too low", HTTP 402) | Never retried. Job PAUSES with code OUT_OF_CREDIT: which provider, the provider's message, where to top up, and the Retry button (developers: `resume`); finished stages and renders kept and never paid for twice |
+| System | Disk below 2 GB free | No new jobs; running jobs pause; message on Home |
+| System | Crash, reboot, power loss | Reopening the app resumes queued and running jobs from `state.json` |
+| System | Second app instance | Single-instance lock: the second launch exits and brings the open window to the front |
+| System | Port in use | A free 127.0.0.1 port is chosen at start-up; if none can be bound, plain-English error and the app exits |
+| System | WebView2 runtime missing | Installer installs it; at launch, plain-English message saying how to install it |
+| System | Output or History folder not writable | Job working state unaffected; app names the folder and what to do; delivery retried with Retry |
+| System | Desktop redirected to OneDrive | One-time warning on Home suggesting `Desktop\RenderAgent` be excluded from sync; all Output/History writes atomic |
+| System | Network down | Calls pause and retry; queued jobs wait |
+| People | Approval/review unanswered 2 working days | Never auto-approved; job stays listed on Home (reminder toasts phase 2) |
 | Config | Invalid config or unknown model ID | Agent refuses to start; `doctor` names the setting |
 
 ## 10. Configuration, security, deployment
 
-Config (`config.yaml`, secrets in `.env`): LLM provider/model per stage; image provider/model;
-image size and quality; references per render (3); planned renders per dwelling (≤16);
-automatic retries after a failed drawing check (1); render concurrency (2); approval gate (on);
-drawing-check strictness; poll interval; page DPI; install and inbox paths.
+Config (`config.yaml` in the working root; keys in Windows Credential Manager): LLM provider/model
+per stage; image provider/model; `images.enabled_providers` (first release: `openai` only; `muapi`
+stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, checked by
+`budget.py`); image size and quality; references per render (3); planned renders per dwelling
+(≤16); automatic retries after a failed drawing check (1); render concurrency (2); approval gate
+(on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
 
-Security: keys only from `.env`/environment, never logged; drawings leave the machine only to the
-configured LLM and image provider; PDF and instruction text is data, quoted into labelled prompt
-blocks; only `@` directives change behaviour.
+Security: keys are entered on the installer page or in Settings, validated with a no-cost
+authentication call (e.g. listing models, never a paid generation), and stored with `keyring` in
+Windows Credential Manager; organisation-wide or individual keys both work; `.env` / environment
+variables remain a developer fallback. Keys never appear in logs, UI responses or job files. The
+app listens on 127.0.0.1 only; every state-changing request carries a per-session token; files are
+served only from the job's own folders. Drawings leave the machine only to the configured LLM and
+image provider; PDF, instruction and correction text is data, quoted into labelled prompt blocks;
+only `@` directives change behaviour. **Risk accepted (15 Oct 2026):** the private `knowledge/` and
+`prompts/` are bundled into the build for in-house designers; anything bundled can be extracted
+from the install. External distribution would need a different design.
 
-Windows deployment: built on the laptop, run on a separate Windows host; all paths relative to the
-install root. `scripts/install.ps1` creates the venv, installs pinned dependencies, installs
-`muapi-cli`, creates `config.yaml` if missing, registers a Scheduled Task (start at logon, restart on
-failure). `doctor` checks Python, keys, folder permissions, provider reachability, free disk.
-Upgrades: `git pull` or release zip, then `install.ps1`; jobs, `config.yaml`, `.env` untouched.
+Deployment (decision 15 Oct 2026): the agent runs on each designer's own Windows 10/11 laptop. The
+desktop app (FastAPI + uvicorn on a free 127.0.0.1 port, pywebview window on Edge WebView2, static
+front end) calls `runner`, the gate, `s9_review` and `output` directly; a background worker renders
+one job at a time and queues the rest; `state.json` is the single source of truth and the UI polls
+(or uses SSE). It replaces `review/server.py` for designers with the same safety rules; the CLI stays
+for developers. Packaging: PyInstaller (one-folder mode: fewer antivirus false alarms, faster start)
+→ Inno Setup → one `Setup.exe`, handed out on a USB pen drive and run after copying it to the
+laptop. The installer: key page with validation, optional `muapi-cli` component (off by default; asks
+for a MUAPI key when ticked), WebView2 check/install, Desktop and Start menu shortcuts with icon,
+uninstaller in Windows "Apps". Upgrades installed over the top keep config, keys, working jobs and
+the Desktop folders; uninstall leaves `Desktop\RenderAgent` in place. Enabling another image provider
+needs only a new `Setup.exe` run over the install plus `images.enabled_providers`. Unsigned for now
+(SmartScreen warning possible); code signing is a Phase 2 decision. Help shows `doctor` results in
+plain English. `scripts/install.ps1` remains a developer tool.
 
 Stack: Python 3.12+, PyMuPDF, Pillow, openai, anthropic, jsonschema, tenacity, PyYAML,
-python-dotenv, muapi-cli; review page on the standard-library HTTP server; FFmpeg/HyperFrames
-phase 2 only.
+python-dotenv, FastAPI, uvicorn, pywebview, keyring, PyInstaller, Inno Setup, muapi-cli (optional);
+FFmpeg/HyperFrames phase 2 only.
 
 ## 11. Testing (see docs/MILESTONES.md for gates)
 
 - Golden fixtures with `answer_key.yaml`; fixture 01 is the first of at least five (single detached,
-  two-storey, separate subdivision, set with a 3D page).
+  two-storey, separate subdivision, set with a 3D page), built up in M5.5.
 - FakeLLM for stages 5 to 9 without keys; mock image provider for full dry runs.
 - Drawing-check tests on doctored images; targeted re-render test (one flag, others byte-identical);
-  model swap test on M1; host install test; fault injection for every error-table row.
+  model swap test on M1; fault injection for every error-table row.
+- App: FastAPI TestClient with FakeLLM and mock images, end to end through the API; a job
+  correction overrides the spec on regeneration and never touches `knowledge/` or `prompts/`;
+  a hand-run UI checklist (`docs/M5_UI_TEST.md`).
+- Install: `Setup.exe` from a pen drive on a clean Windows laptop with no Python, Git or VS Code;
+  upgrade and uninstall checks (M6).
+- Refinement loop (M5.5): real projects run through the app with a per-round image cap and an
+  approved cost estimate; `scripts/compare_fixture.py` writes a comparison page per fixture
+  (extraction grade, planned vs delivered views, agent render beside delivered render, drawing
+  check, designer flags); fixes only as general rules, logged in `docs/REFINEMENT_LOG.md`; after
+  each fix round extraction and planning re-run on all fixtures and affected fixtures re-render.
+  Metrics: one row per fixture per round in `docs/REFINEMENT_METRICS.csv` (extraction score,
+  must_not_appear hits, first-pass drawing-check and designer approval rates, regenerations, LLM and
+  image cost). One verified **holdout** fixture is never used to propose fixes, runs only at the
+  gate, and must score within an agreed margin of the tuned fixtures. Delivered renders are
+  evaluation targets only, never sent to the image model.
 - No fixture references in rules, prompts or code (`scripts/check_no_fixture_refs.py`).
 
 ## 12. Decisions (12 Oct 2026)
@@ -295,7 +392,7 @@ phase 2 only.
 | Materials | From the PDF; designer confirms and fills gaps |
 | Subdivisions | 2+ dwellings get one streetscape first; attached share renders; separate are otherwise independent |
 | Output | Common + Dwelling folders; shared renders copied into each dwelling |
-| Host | Windows, separate from the laptop; inbox on local disk |
+| Host | ~~Windows, separate from the laptop; inbox on local disk~~ replaced 15 Oct 2026: each designer's own laptop (below) |
 | After rendering | Automatic drawing check, then thumbnail review; only flagged renders regenerated |
 
 **14 Oct 2026 (designer review of the first paid renders):** colours follow the drawings, changeable
@@ -303,3 +400,20 @@ with `@select` or at the gate; entry hallway added; rear view only with a docume
 similar; WIR lowest priority and never inserted; streetscape is priority 1 for 2 or more dwellings,
 never for a single house (`@streetscape=false` omits it); Australian-style letterbox pillar allowed without numbers or text; drafting
 symbols (window V lines, door swing lines) never drawn; no party-wall detail required.
+
+**15 Oct 2026 (designer desktop app):**
+
+| # | Topic | Decision |
+| --- | --- | --- |
+| 1 | Deployment | Runs on each designer's own Windows 10/11 laptop and runs their own jobs (replaces the separate host) |
+| 2 | UI | Desktop app: FastAPI + uvicorn on 127.0.0.1, free port at start-up, native pywebview (Edge WebView2) window; static HTML/CSS/JS, no Node build, no CDN. Browser mode later |
+| 3 | App and pipeline | FastAPI calls runner, gate, s9_review and output directly, never the CLI; background worker, one job rendering at a time, others queued; `state.json` is the single source of truth; UI polls or uses SSE; replaces `review/server.py` for designers with the same safety rules (localhost, per-session token on state-changing requests, files only from the job's folders); CLI stays for developers |
+| 4 | Paths | Program in `C:\Program Files\RenderAgent` (read-only: code, knowledge, prompts, schemas); working files in `%LOCALAPPDATA%\RenderAgent`; `config.py` resolves install and working roots separately; dev mode keeps the repo layout; no hard-coded drive letters or user names |
+| 5 | Designer folders | `Desktop\RenderAgent\Input`, `Output`, `History` (known-folder API); Start copies, verifies by sha256, moves originals to dated History with `started.txt`; Output has Draft, Final, report.html; Retry button resumes; OneDrive warning; atomic writes (§8) |
+| 6 | API keys | Entered on the installer page and validated with a no-cost call; also checked at first run; organisation or individual keys; Windows Credential Manager via `keyring`; `.env` developer fallback; no job without a valid key per enabled provider; Settings replaces and re-tests; never in logs, UI responses or job files |
+| 7 | Bundled rules | Private `knowledge/` and `prompts/` bundled for in-house use; risk: extractable from the install; external distribution needs a different design |
+| 8 | Packaging | PyInstaller one-folder → Inno Setup → one `Setup.exe` on a USB pen drive; shortcuts, icon, uninstaller, upgrade over the top keeps config, keys, jobs and Desktop folders; WebView2 check/install; unsigned for now, code signing Phase 2 |
+| 9 | Image providers | Switchable without code changes; first release enables OpenAI only; muapi hidden by `images.enabled_providers`; enabling it later = new `Setup.exe` over the install (optional muapi-cli component + MUAPI key page) + the flag; Settings shows a provider only when enabled with a valid key |
+| 10 | Spec sync | `docs/SPEC.md` starts with "Last synced with the live page: <date>"; at every exit gate Claude Code lists the SPEC sections changed and asks for confirmation; date updated only after confirmation; gate not passed until confirmed |
+| 11 | Git | Claude Code never runs state-changing git commands (public repo or `private/`); each task ends with the changed files grouped "public repo" / "private submodule (private/)"; enforced by deny rules in `.claude/settings.json` |
+| 12 | Corrections and learning | Models do not learn by themselves. **This render:** flag category + correction in the designer's words, added to that render's prompt (FR-13). **This job:** facts corrected at the gate or in review go to `corrections.json`, override the House Specification for every later render and re-run of the job, shown in `report.html`; never change `knowledge/` or `prompts/`. **All future jobs:** every flag and correction appended to `%LOCALAPPDATA%\RenderAgent\feedback\feedback.jsonl` (job ID, view, category, correction text, "suggest as a general rule" tick); Help → "Export feedback" writes a zip (text and thumbnails only, no keys, no drawings) to `Desktop\RenderAgent` for return on a pen drive; `scripts/review_feedback.py`, run by a developer with Claude Code, groups feedback and proposes general rules; only owner-approved rules are applied, followed by the M5.5 regression, and reach designers in the next `Setup.exe`. Correction text is data and cannot change directives, limits or providers (FR-19) |

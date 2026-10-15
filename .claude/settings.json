@@ -14,7 +14,13 @@
     "deny": [
       "Read(.env)",
       "Edit(.env)",
-      "Edit(tests/fixtures/**/*.pdf)"
+      "Edit(tests/fixtures/**/*.pdf)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git reset:*)",
+      "Bash(git checkout:*)",
+      "Bash(git submodule:*)"
     ]
   }
 }
