@@ -29,7 +29,10 @@ def _not_readable(name: str, cause: str) -> InputError:
         code="NOT_A_PDF",
         what_happened=f"'{name}' is not a readable PDF.",
         likely_cause=cause,
-        what_to_do="Export the drawings again as PDF from Revit and drop the new file in the inbox.",
+        what_to_do=(
+            "Export the drawings again as PDF from Revit, put the new file in the Input folder "
+            "and press Start."
+        ),
     )
 
 
@@ -40,7 +43,7 @@ def _open_pdf(path: Path, max_mb: int) -> pymupdf.Document:
             code="PDF_EMPTY",
             what_happened=f"'{path.name}' is empty (0 bytes).",
             likely_cause="The file was still being copied, or the export failed.",
-            what_to_do="Drop a complete copy of the PDF in the inbox.",
+            what_to_do="Put a complete copy of the PDF in the Input folder and press Start.",
         )
     if size > max_mb * 1_000_000:
         raise InputError(
@@ -62,7 +65,7 @@ def _open_pdf(path: Path, max_mb: int) -> pymupdf.Document:
             code="PDF_ENCRYPTED",
             what_happened=f"'{path.name}' is password-protected.",
             likely_cause="The PDF was exported with a password or permissions lock.",
-            what_to_do="Drop an unlocked copy of the PDF in the inbox.",
+            what_to_do="Put an unlocked copy of the PDF (no password) in the Input folder and press Start.",
         )
     if doc.page_count == 0:
         doc.close()

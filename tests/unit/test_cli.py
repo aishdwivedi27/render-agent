@@ -3,8 +3,9 @@ from pathlib import Path
 
 import pymupdf
 
-from render_agent.cli import doctor_checks, main
+from render_agent.cli import main
 from render_agent.config import load_config
+from render_agent.doctor import doctor_checks
 
 ROOT = Path(__file__).resolve().parents[2]
 

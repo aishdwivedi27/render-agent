@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="session-token" content="{{SESSION_TOKEN}}">
+<title>Render Agent</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Crect x=%223%22 y=%223%22 width=%2226%22 height=%2226%22 fill=%22none%22 stroke=%22%231d5873%22 stroke-width=%223%22/%3E%3Cpath d=%22M3 21h26M19 21v8%22 stroke=%22%231d5873%22 stroke-width=%223%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@112..125,500..800&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="rail" aria-label="Main">
+    <a class="mark" href="#/home" aria-label="Render Agent home">RA</a>
+    <a href="#/home" data-nav="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11 12 4l8 7v9h-5v-6H9v6H4z"/></svg>Home</a>
+    <a href="#/settings" data-nav="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"/><path d="m11 12 8-8m-3 3 3 3m-6 0 2 2"/></svg>Keys</a>
+    <a href="#/help" data-nav="help"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14M12 17.5v.01"/></svg>Help</a>
+  </nav>
+  <main id="view" tabindex="-1" aria-live="polite"></main>
+</div>
+<div id="drop-veil" hidden><p>Drop the PDF to put it in Input</p></div>
+<dialog id="viewer" aria-label="Look closely"></dialog>
+<div id="toast" role="status" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

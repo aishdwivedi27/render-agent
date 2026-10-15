@@ -68,8 +68,23 @@ def save_review(job_dir: Path, review: dict[str, Any]) -> None:
     atomic_write_json(job_dir / REVIEW, review)
 
 
+FLAG_CATEGORIES = {
+    "material": "Wrong material or colour",
+    "extra_opening": "Extra window or door",
+    "missing_opening": "Missing window or door",
+    "roof_storeys": "Wrong roof or number of storeys",
+    "framing": "Wrong framing or view",
+    "other": "Something else",
+}
+
+
 def decide(
-    review: dict[str, Any], render_id: str, action: str, note: str = "", by: str = "designer"
+    review: dict[str, Any],
+    render_id: str,
+    action: str,
+    note: str = "",
+    by: str = "designer",
+    category: str | None = None,
 ) -> str | None:
     """Records approve/flag. Returns a problem (str) instead of raising, for the page and the CLI."""
     entry = review["renders"].get(render_id)
@@ -85,10 +100,20 @@ def decide(
         return f"{render_id} has no image to approve ({entry['status']})"
     if action == "flag" and not note.strip():
         return f"{render_id}: a flag needs a note saying what to change"
+    if category is not None and category not in FLAG_CATEGORIES:
+        return f"unknown flag category {category}"
     entry["status"] = "approved" if action == "approve" else "flagged"
     entry["note"] = note.strip() or None
+    entry["category"] = category if action == "flag" else None
     entry["history"].append(
-        {"action": action, "version": entry.get("version"), "note": entry["note"], "by": by, "time": _now()}
+        {
+            "action": action,
+            "version": entry.get("version"),
+            "note": entry["note"],
+            "category": entry["category"],
+            "by": by,
+            "time": _now(),
+        }
     )
     return None
 
@@ -131,11 +156,13 @@ def regenerate_flagged(ctx: RunContext, review: dict[str, Any]) -> list[str]:
     checker = Checker(ctx, renderer)
     for rid in flagged:
         note = review["renders"][rid]["note"] or ""
+        if cat := review["renders"][rid].get("category"):
+            note = f"{FLAG_CATEGORIES[cat]}: {note}"
         log.info("job %s: regenerating flagged %s: %s", ctx.job.id, rid, note)
         rec = renderer.render(rid, kind="review", fix=[note])
         if latest(rec) is not None and rec["status"] == "rendered":
             checker.run_one(rid)
-            review["renders"][rid].update(status="pending", note=None)
+            review["renders"][rid].update(status="pending", note=None, category=None)
         else:
             review["renders"][rid].update(
                 status="failed", reason=(rec.get("error") or {}).get("what_happened")

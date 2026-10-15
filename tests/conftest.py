@@ -12,6 +12,7 @@ import pytest
 from render_agent.config import load_config
 
 ROOT = Path(__file__).resolve().parents[1]
+os.environ["RENDER_AGENT_NO_KEYRING"] = "1"  # never read a real key from Credential Manager
 FIXTURE_01 = ROOT / "private" / "fixtures" / "fixture_01"
 
 

@@ -1,29 +1,22 @@
-"""Command line: watch | run | resume | approve | review | doctor."""
+"""Command line (developers): run | resume | approve | review | doctor | app; watch is phase 2."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import logging
 import platform
-import shutil
-import sys
-import uuid
 from collections.abc import Callable
 from pathlib import Path
 
 from render_agent import __version__
 from render_agent.config import Settings, load_config
+from render_agent.doctor import doctor_checks
 from render_agent.errors import AgentError
-from render_agent.logging_setup import attach_job_log, detach_job_log, setup_agent_logging
+from render_agent.logging_setup import setup_agent_logging
 from render_agent.pipeline import gate
 from render_agent.pipeline.job import Job, load_job, new_job
-from render_agent.pipeline.runner import RunContext, RunResult, run_job
-from render_agent.util.fs import sha256_file
-
-MIN_PYTHON = (3, 12)
-WRITABLE_PATHS = ("inbox", "jobs", "failed", "logs")
-READABLE_PATHS = ("knowledge", "prompts", "schemas")
+from render_agent.pipeline.runner import RunResult
+from render_agent.pipeline.start import batch_sources, continue_job, drop_inputs, existing_job
 
 
 def _line(level: str, text: str) -> None:
@@ -36,45 +29,6 @@ def _print_error(err: AgentError) -> None:
         print(f"      Likely cause: {err.likely_cause}")
     if err.what_to_do:
         print(f"      What to do: {err.what_to_do}")
-
-
-def _writable(folder: Path) -> bool:
-    try:
-        folder.mkdir(parents=True, exist_ok=True)
-        probe = folder / f".doctor-{uuid.uuid4().hex}.tmp"
-        probe.write_bytes(b"ok")
-        probe.unlink()
-        return True
-    except OSError:
-        return False
-
-
-def doctor_checks(settings: Settings) -> list[tuple[str, str]]:
-    """(level, message) pairs; level is OK, WARN or FAIL."""
-    results: list[tuple[str, str]] = []
-    py_ok = sys.version_info[:2] >= MIN_PYTHON
-    results.append(("OK" if py_ok else "FAIL", f"Python {platform.python_version()} (need 3.12+)"))
-    results.append(("OK", f"config: {settings.config_file}"))
-    for var in settings.required_key_vars():
-        present = settings.secret(var) is not None
-        results.append(("OK" if present else "FAIL", f"{var} {'set' if present else 'missing from .env'}"))
-    for name in WRITABLE_PATHS:
-        folder = settings.path(name)
-        ok = _writable(folder)
-        results.append(("OK" if ok else "FAIL", f"{name}/ {'writable' if ok else 'not writable'}: {folder}"))
-    for name in READABLE_PATHS:
-        folder = settings.path(name)
-        ok = folder.is_dir()
-        results.append(("OK" if ok else "FAIL", f"{name}/ {'found' if ok else 'missing'}: {folder}"))
-    free_gb = shutil.disk_usage(settings.root).free / 1e9
-    min_gb = settings.watcher.min_free_disk_gb
-    results.append(("OK" if free_gb >= min_gb else "FAIL", f"free disk {free_gb:.1f} GB (minimum {min_gb})"))
-    from render_agent.images.muapi_cli import doctor_check
-
-    results.append(doctor_check())
-    found = shutil.which("ffmpeg")
-    results.append(("OK" if found else "WARN", f"ffmpeg {'found' if found else 'not on PATH'}"))
-    return results
 
 
 def cmd_doctor(_: argparse.Namespace) -> int:
@@ -93,11 +47,8 @@ def cmd_doctor(_: argparse.Namespace) -> int:
 
 
 def _run_job(job: Job, settings: Settings, dry_run: bool) -> RunResult:
-    handler = attach_job_log(job.dir)
-    try:
-        result = run_job(RunContext(job=job, settings=settings, dry_run=dry_run))
-    finally:
-        detach_job_log(handler)
+    job.state["dry_run"] = dry_run
+    result = continue_job(job, settings)
     print(f"Job {job.id}: {result.status}" + (f" at {result.stopped_at}" if result.stopped_at else ""))
     print(f"  {result.message}")
     print(f"  Folder: {job.dir}")
@@ -119,35 +70,6 @@ def _with_settings(fn: Callable[[argparse.Namespace, Settings], int]) -> Callabl
             return 1
 
     return wrapper
-
-
-def drop_inputs(src: Path) -> list[Path]:
-    """The files of one job: a folder's PDFs and .txt files, or a PDF plus a same-named .txt."""
-    if src.is_dir():
-        return sorted(src.glob("*.pdf")) + sorted(src.glob("*.txt")) + sorted(src.glob("*selections.yaml"))
-    sides = [src.with_suffix(".txt"), src.with_suffix(".selections.yaml")]
-    return [src, *(p for p in sides if p.is_file())]
-
-
-def batch_sources(folder: Path) -> list[Path]:
-    """Every PDF directly in the folder (its same-named .txt goes with it) and every sub-folder."""
-    return sorted(p for p in folder.iterdir() if p.is_dir() or p.suffix.lower() == ".pdf")
-
-
-def existing_job(jobs_dir: Path, inputs: list[Path]) -> Path | None:
-    """A job already made from exactly these PDFs (same SHA-256), so a set is never processed twice."""
-    want = sorted(sha256_file(p) for p in inputs if p.suffix.lower() == ".pdf")
-    if not want or not jobs_dir.is_dir():
-        return None
-    for state_file in sorted(jobs_dir.glob("*/state.json")):
-        try:
-            state = json.loads(state_file.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            continue
-        have = sorted(i["sha256"] for i in state.get("inputs", []) if i["name"].lower().endswith(".pdf"))
-        if have == want:
-            return state_file.parent
-    return None
 
 
 def cmd_run(args: argparse.Namespace, settings: Settings) -> int:
@@ -264,6 +186,13 @@ def serve_review(job: Job, settings: Settings) -> int:
     return 0
 
 
+def cmd_app(args: argparse.Namespace, settings: Settings) -> int:
+    """The designer desktop app (dev mode: from the repo)."""
+    from render_agent.app.launcher import run
+
+    return run(settings, browser=args.browser)
+
+
 def _todo(name: str) -> Callable[[argparse.Namespace], int]:
     def run(_: argparse.Namespace) -> int:
         print(f"'{name}' is not implemented yet. See docs/MILESTONES.md.")
@@ -314,6 +243,9 @@ def build_parser() -> argparse.ArgumentParser:
     review.add_argument("--flag", action="append", default=[], metavar='ID="note"')
     review.add_argument("--serve", action="store_true", help="open the review page on 127.0.0.1")
     review.set_defaults(func=_with_settings(cmd_review))
+    app = sub.add_parser("app", help="open the designer desktop app")
+    app.add_argument("--browser", action="store_true", help="open in the browser instead of a window")
+    app.set_defaults(func=_with_settings(cmd_app))
     return p
 
 

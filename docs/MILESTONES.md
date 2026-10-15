@@ -84,18 +84,18 @@ Windows host after a fresh `install.ps1`") moved to M6's exit gate, where it is 
 
 Decisions 15 Oct 2026 (SPEC §12, points 1 to 12). Designers use the agent with no terminal.
 
-- [ ] `config.py`: install root and working root resolved separately (`C:\Program Files\RenderAgent` read-only; `%LOCALAPPDATA%\RenderAgent` for jobs, config, logs, feedback); dev mode keeps the repo layout; no hard-coded drive letters or user names
-- [ ] Desktop `RenderAgent\Input`, `Output`, `History` created on first launch (known-folder API); Start: copy, sha256 verify, move originals to `History\<YYYY-MM-DD HHMM> - <input name>\` with `started.txt`; `-2`/`-3` and ` (YYYY-MM-DD)` suffixes; Output `Draft\`, `Final\`, `report.html` linking to History; OneDrive detection; all Output/History writes atomic (SPEC §8)
-- [ ] FastAPI app package `src/render_agent/app/`: API routes for Input items, jobs, approval gate, review, settings and health; calls runner, gate, s9_review and output directly (never the CLI); localhost only, per-session token on every state-changing request, files served only from the job's own folders
-- [ ] Background job worker with queue: one job rendering at a time; `state.json` the single source of truth; UI polls (or SSE)
-- [ ] `keyring` key storage (Windows Credential Manager), no-cost key validation, `.env` developer fallback; keys never in logs, UI responses or job files
-- [ ] `images.enabled_providers` (first release `openai` only); Settings and Start show a provider only when enabled with a valid key
-- [ ] Flag categories (wrong material/colour, extra opening, missing opening, wrong roof/storeys, wrong framing/view, other) + correction text on review; job corrections at the gate or review saved to `corrections.json`, overriding the House Specification for later renders and re-runs, shown in `report.html`
-- [ ] Feedback store `%LOCALAPPDATA%\RenderAgent\feedback\feedback.jsonl` (job ID, view, category, correction, "suggest as a general rule"); Help → "Export feedback" zip (text and thumbnails only, no keys, no drawings) to `Desktop\RenderAgent`
-- [ ] Test: a job correction overrides the spec on regeneration and never touches `knowledge/` or `prompts/`
-- [ ] pywebview launcher (Edge WebView2) on a free 127.0.0.1 port, single-instance lock
-- [ ] One dev launch command (bash and PowerShell) that opens the app window from the repo
-- [ ] Screens:
+- [x] `config.py`: install root and working root resolved separately (`C:\Program Files\RenderAgent` read-only; `%LOCALAPPDATA%\RenderAgent` for jobs, config, logs, feedback); dev mode keeps the repo layout; no hard-coded drive letters or user names
+- [x] Desktop `RenderAgent\Input`, `Output`, `History` created on first launch (known-folder API); Start: copy, sha256 verify, move originals to `History\<YYYY-MM-DD HHMM> - <input name>\` with `started.txt`; `-2`/`-3` and ` (YYYY-MM-DD)` suffixes; Output `Draft\`, `Final\`, `report.html` linking to History; OneDrive detection; all Output/History writes atomic (SPEC §8)
+- [x] FastAPI app package `src/render_agent/app/`: API routes for Input items, jobs, approval gate, review, settings and health; calls runner, gate, s9_review and output directly (never the CLI); localhost only, per-session token on every state-changing request, files served only from the job's own folders
+- [x] Background job worker with queue: one job rendering at a time; `state.json` the single source of truth; UI polls (or SSE)
+- [x] `keyring` key storage (Windows Credential Manager), no-cost key validation, `.env` developer fallback; keys never in logs, UI responses or job files
+- [x] `images.enabled_providers` (first release `openai` only); Settings and Start show a provider only when enabled with a valid key
+- [x] Flag categories (wrong material/colour, extra opening, missing opening, wrong roof/storeys, wrong framing/view, other) + correction text on review; job corrections at the gate or review saved to `corrections.json`, overriding the House Specification for later renders and re-runs, shown in `report.html`
+- [x] Feedback store `%LOCALAPPDATA%\RenderAgent\feedback\feedback.jsonl` (job ID, view, category, correction, "suggest as a general rule"); Help → "Export feedback" zip (text and thumbnails only, no keys, no drawings) to `Desktop\RenderAgent`
+- [x] Test: a job correction overrides the spec on regeneration and never touches `knowledge/` or `prompts/`
+- [x] pywebview launcher (Edge WebView2) on a free 127.0.0.1 port, single-instance lock
+- [x] One dev launch command (bash and PowerShell) that opens the app window from the repo
+- [x] Screens:
   - Home: items waiting in Input with Refresh and Start (directive options on Start), job list with plain-English status, Retry on failed or flagged jobs, OneDrive warning when relevant
   - Approval: planned views and materials, NOT FOUND items to fill, fact corrections, planned image count before any spend, Approve button
   - Progress
@@ -103,9 +103,9 @@ Decisions 15 Oct 2026 (SPEC §12, points 1 to 12). Designers use the agent with 
   - Results: "Open Output folder" and "Open History folder" buttons
   - Settings: keys, enabled providers only, model choice, test connection
   - Help: doctor results in plain English, "Copy diagnostics", "Export feedback"
-- [ ] Every `error.json` is shown as its what_happened / what_to_do text, never a stack trace
-- [ ] New error-table rows (SPEC §9) each covered by a fault-injection test
-- [ ] Tests use FastAPI TestClient with FakeLLM and the mock image provider
+- [x] Every `error.json` is shown as its what_happened / what_to_do text, never a stack trace
+- [x] New error-table rows (SPEC §9) each covered by a fault-injection test
+- [x] Tests use FastAPI TestClient with FakeLLM and the mock image provider
 
 **Exit gate (three parts):**
 

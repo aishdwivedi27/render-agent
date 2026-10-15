@@ -38,14 +38,16 @@ def test_size_for_turns_portrait():
     assert size_for("auto", "portrait") == "auto"
 
 
-def test_mock_is_deterministic_and_draws_references(tmp_path):
+def test_mock_is_deterministic_and_never_shows_the_drawings(tmp_path):
     ref = tmp_path / "r.png"
     ref.write_bytes(_png((200, 0, 0), (300, 200)))
     a = MockProvider().render(_req(refs=[ref]))
     b = MockProvider().render(_req(refs=[ref]))
     assert a == b
-    im = Image.open(io.BytesIO(a))
-    assert im.size == (768, 512) and (200, 0, 0) in {im.getpixel((x, 480)) for x in range(16, 200)}
+    im = Image.open(io.BytesIO(a)).convert("RGB")
+    assert im.size == (768, 512)
+    colours = {c for _, c in im.getcolors(maxcolors=1 << 16)}
+    assert (200, 0, 0) not in colours  # a practice image, not a collage of the drawings
 
 
 def test_retry_transient_then_success():

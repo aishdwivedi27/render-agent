@@ -251,7 +251,7 @@ never re-drop files.
 **OneDrive.** If the Desktop is redirected to OneDrive, Home shows a one-time warning suggesting
 `Desktop\RenderAgent` be excluded from sync.
 
-Each directive below is also an option on the Start step.
+Each directive below is also an option on the Start step. Start options are written as these directives to `start_options.txt` in the job's `input/` folder, so they are recorded with the job and go through the same validation; the app's "Practice run" is a dry run (offline reader and mock images, no key needed).
 
 | Directive | Example | Effect |
 | --- | --- | --- |
@@ -265,7 +265,16 @@ Each directive below is also an option on the Start step.
 | `@select` | `@select entry_door=pivot, spotted gum` | Pre-sets a material selection (still shown at the gate) |
 | `@dry_run` | `@dry_run=true` | Mock provider throughout |
 
-Statuses: AWAITING_APPROVAL, RENDERING, AWAITING_REVIEW, SUCCEEDED (every render approved), FAILED.
+Statuses (amended 15 Oct 2026, M5), each shown in the app in plain words:
+
+| Status | App shows | Meaning |
+| --- | --- | --- |
+| RUNNING / RENDERING | Working on it… / Making your renders… (Waiting its turn while queued) | stages running |
+| AWAITING_APPROVAL | Waiting for your approval | approval gate |
+| AWAITING_REVIEW | Ready for your review | thumbnail review |
+| SUCCEEDED | Finished | every render approved |
+| PAUSED | Paused, needs your attention | key, credit or disk problem; nothing lost; Retry resumes |
+| FAILED | Something went wrong | error.json shown; Retry resumes the existing job |
 
 ## 9. Error handling
 
@@ -323,7 +332,7 @@ Config (`config.yaml` in the working root; keys in Windows Credential Manager): 
 per stage; image provider/model; `images.enabled_providers` (first release: `openai` only; `muapi`
 stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, checked by
 `budget.py`); image size and quality; references per render (3); planned renders per dwelling
-(≤16); automatic retries after a failed drawing check (1); render concurrency (2); approval gate
+(≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`); render concurrency (2); approval gate
 (on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
 
 Security: keys are entered on the installer page or in Settings, validated with a no-cost

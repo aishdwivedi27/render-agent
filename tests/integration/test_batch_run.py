@@ -57,7 +57,7 @@ def test_several_paths(install, monkeypatch, capsys):
 
 
 def test_selections_yaml_travels_with_its_pdf(install, monkeypatch):
-    from render_agent.cli import drop_inputs
+    from render_agent.pipeline.start import drop_inputs
 
     a = make_pdf(install / "y" / "a.pdf", ["X"])
     (install / "y" / "a.selections.yaml").write_text("roof_colour: Monument\n", encoding="utf-8")

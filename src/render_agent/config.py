@@ -1,14 +1,20 @@
-"""Loads config.yaml and .env and validates them into typed settings.
+r"""Loads config.yaml and .env and validates them into typed settings.
 
 Unknown keys, bad values and malformed model IDs raise PermanentError(code="CONFIG_INVALID") naming
 the setting, so `doctor` and the agent can refuse to start with a clear message (spec section 9).
-Every path is resolved relative to the install root. Secrets come only from .env / the environment.
+Three roots (decision 15 Oct 2026, docs/SPEC.md section 8):
+- install root (read-only): code, knowledge/, prompts/, schemas/;
+- working root: config.yaml, jobs/, failed/, logs/, feedback/ (%LOCALAPPDATA%\RenderAgent when installed);
+- designer folders: Desktop\RenderAgent\{Input,Output,History} (see app/designer.py).
+In dev mode (running from the repo) the install and working roots are the same folder.
+Keys come from the environment, then Windows Credential Manager (keyring), then .env.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import sys
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -21,6 +27,8 @@ from render_agent.errors import PermanentError
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*[a-z0-9]$")
 KEY_ENV_VARS = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "muapi": "MUAPI_API_KEY"}
 SECRET_ENV_VARS = (*KEY_ENV_VARS.values(), "SMTP_USERNAME", "SMTP_PASSWORD")
+READ_ONLY_PATHS = ("knowledge", "prompts", "schemas")  # resolved against the install root
+APP_FOLDER = "RenderAgent"
 
 
 def _check_model_id(value: str) -> str:
@@ -44,6 +52,7 @@ class Paths(_Strict):
     prompts: Path
     schemas: Path
     logs: Path
+    feedback: Path = Path("feedback")
 
 
 class Watcher(_Strict):
@@ -82,6 +91,7 @@ class MuapiImages(_Strict):
 
 class Images(_Strict):
     provider: Literal["openai", "muapi", "mock"]
+    enabled_providers: list[Literal["openai", "muapi"]] = Field(default=["openai"])
     openai: OpenAIImages
     muapi: MuapiImages
     references_per_render: int = Field(ge=0)
@@ -126,6 +136,11 @@ class Email(_Strict):
     to: list[str]
 
 
+class Designer(_Strict):
+    desktop: str = ""  # empty: the Windows Desktop known folder; tests and odd setups override it
+    folder: str = Field(default=APP_FOLDER, min_length=1)
+
+
 class Notify(_Strict):
     windows_toast: bool
     email: Email
@@ -144,15 +159,20 @@ class Settings(_Strict):
     ingest: Ingest
     review: Review
     notify: Notify
+    designer: Designer = Field(default_factory=Designer)
 
     root: Path = Field(exclude=True)
+    work_root: Path = Field(exclude=True)
     config_file: Path = Field(exclude=True)
     secrets: dict[str, SecretStr] = Field(default_factory=dict, exclude=True, repr=False)
 
     def path(self, name: str) -> Path:
-        """An absolute path for a `paths:` entry, resolved against the install root."""
+        """An absolute path for a `paths:` entry: knowledge, prompts and schemas against the
+        install root, everything the agent writes against the working root."""
         p = Path(getattr(self.paths, name))
-        return p if p.is_absolute() else self.root / p
+        if p.is_absolute():
+            return p
+        return (self.root if name in READ_ONLY_PATHS else self.work_root) / p
 
     def secret(self, env_var: str) -> str | None:
         value = self.secrets.get(env_var)
@@ -166,10 +186,32 @@ class Settings(_Strict):
         return sorted(KEY_ENV_VARS[p] for p in providers)
 
 
+def installed() -> bool:
+    """True in the packaged app (PyInstaller); dev mode runs from the repo."""
+    return bool(getattr(sys, "frozen", False)) or os.environ.get("RENDER_AGENT_INSTALLED") == "1"
+
+
 def install_root() -> Path:
-    """The folder that holds config.yaml: RENDER_AGENT_HOME if set, else the working directory."""
+    """Program, knowledge, prompts, schemas: RENDER_AGENT_HOME, else the packaged program folder,
+    else the working directory (dev mode)."""
     home = os.environ.get("RENDER_AGENT_HOME")
-    return Path(home) if home else Path.cwd()
+    if home:
+        return Path(home)
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path.cwd()
+
+
+def working_root(install: Path) -> Path:
+    r"""Jobs, config.yaml, logs, feedback: RENDER_AGENT_WORK, else %LOCALAPPDATA%\RenderAgent when
+    installed, else the install root (dev mode keeps the repo layout)."""
+    work = os.environ.get("RENDER_AGENT_WORK")
+    if work:
+        return Path(work)
+    if installed():
+        local = os.environ.get("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
+        return Path(local) / APP_FOLDER
+    return install
 
 
 def _setting_name(loc: tuple[Any, ...]) -> str:
@@ -177,22 +219,28 @@ def _setting_name(loc: tuple[Any, ...]) -> str:
 
 
 def _load_secrets(root: Path) -> dict[str, SecretStr]:
-    """Environment variables win over .env, so a host can override the file."""
+    """Environment variables, then Windows Credential Manager, then .env (developer fallback)."""
+    from render_agent.app.keys import stored_key
+
     file_values = dotenv_values(root / ".env") if (root / ".env").exists() else {}
     out: dict[str, SecretStr] = {}
     for var in SECRET_ENV_VARS:
-        value = os.environ.get(var) or file_values.get(var) or ""
+        value = os.environ.get(var) or stored_key(var) or file_values.get(var) or ""
         out[var] = SecretStr(value.strip())
     return out
 
 
-def load_config(root: Path | None = None) -> Settings:
+def load_config(root: Path | None = None, work: Path | None = None) -> Settings:
     root = (root or install_root()).resolve()
-    cfg_path = root / "config.yaml"
+    work = (work or working_root(root)).resolve()
+    cfg_path = work / "config.yaml"
+    if not cfg_path.exists() and work != root and (root / "config.example.yaml").is_file():
+        work.mkdir(parents=True, exist_ok=True)  # first run of the installed app
+        cfg_path.write_text((root / "config.example.yaml").read_text(encoding="utf-8"), encoding="utf-8")
     if not cfg_path.exists():
         raise PermanentError(
             code="CONFIG_MISSING",
-            what_happened=f"No config.yaml found in {root}.",
+            what_happened=f"No config.yaml found in {work}.",
             likely_cause="The install step that copies config.example.yaml has not been run.",
             what_to_do="Copy config.example.yaml to config.yaml in the install folder.",
         )
@@ -208,7 +256,9 @@ def load_config(root: Path | None = None) -> Settings:
     if not isinstance(data, dict):
         raise PermanentError(code="CONFIG_INVALID", what_happened="config.yaml must be a mapping.")
     try:
-        settings = Settings(**data, root=root, config_file=cfg_path, secrets=_load_secrets(root))
+        settings = Settings(
+            **data, root=root, work_root=work, config_file=cfg_path, secrets=_load_secrets(work)
+        )
     except ValidationError as exc:
         errors = sorted(exc.errors(), key=lambda e: e["type"] != "extra_forbidden")
         problems = [
@@ -224,7 +274,23 @@ def load_config(root: Path | None = None) -> Settings:
             what_to_do=f"Fix {names} in config.yaml (compare with config.example.yaml), then retry.",
         ) from exc
     _check_provider_models(settings)
+    _check_image_provider(settings)
     return settings
+
+
+def _check_image_provider(s: Settings) -> None:
+    if s.images.provider != "mock" and s.images.provider not in s.images.enabled_providers:
+        raise PermanentError(
+            code="CONFIG_INVALID",
+            what_happened=(
+                f"Setting 'images.provider' ('{s.images.provider}') is not in 'images.enabled_providers' "
+                f"({', '.join(s.images.enabled_providers) or 'none'})."
+            ),
+            likely_cause="A provider was chosen that this installation does not offer.",
+            what_to_do=(
+                "Set 'images.provider' to an enabled provider, or add it to 'images.enabled_providers'."
+            ),
+        )
 
 
 def _check_provider_models(s: Settings) -> None:

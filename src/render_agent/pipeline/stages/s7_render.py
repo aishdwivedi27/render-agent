@@ -22,6 +22,7 @@ from render_agent.errors import AgentError, PauseJobError
 from render_agent.images import ImageProvider, RenderRequest, get_provider, render_with_retry, size_for
 from render_agent.images.budget import Budget, allowances
 from render_agent.images.overlay import draft_overlay
+from render_agent.pipeline import corrections
 from render_agent.pipeline.stages._common import ingest_info, read_json
 from render_agent.util.directives import parse_directives
 from render_agent.util.fs import atomic_write_bytes, atomic_write_json, atomic_write_text, safe_name
@@ -67,7 +68,9 @@ class Renderer:
         return parse_directives(ingest_info(self.ctx).get("instructions", "") if info.is_file() else "")
 
     def _directive_provider(self) -> str | None:
-        return self._directives().provider  # type: ignore[no-any-return]
+        name = self._directives().provider
+        allowed = [*self.ctx.settings.images.enabled_providers, "mock"]
+        return name if name in allowed else None  # a provider not enabled is never used
 
     def _directive_dry_run(self) -> bool:
         return bool(self._directives().dry_run)
@@ -99,6 +102,7 @@ class Renderer:
         e = self.entry(render_id)
         rec = self.record(render_id)
         prompt = (self.job_dir / e["prompt_file"]).read_text(encoding="utf-8")
+        prompt += corrections.prompt_block(self.job_dir)
         if fix and kind == "review":
             prompt += (
                 "\nDESIGNER CHANGES REQUESTED AT REVIEW (apply them; the drawings still decide the "

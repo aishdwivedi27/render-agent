@@ -209,8 +209,11 @@ def key_missing(env_var: str) -> PauseJobError:
     return PauseJobError(
         code="KEY_MISSING",
         what_happened=f"{env_var} is not set.",
-        likely_cause="The key was never added to .env, or .env was replaced.",
-        what_to_do=f"Add {env_var} to .env in the install folder, then resume the job.",
+        likely_cause="The key was never added in Settings (or .env), or it was removed.",
+        what_to_do=(
+            f"Add the key in Settings, then press Retry (developers: set {env_var} in .env, "
+            "then resume the job)."
+        ),
     )
 
 

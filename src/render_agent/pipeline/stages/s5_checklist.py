@@ -121,6 +121,11 @@ def run(ctx: RunContext) -> str:
     if directives.llm and directives.llm not in ctx.settings.llm.choices:
         known = ", ".join(sorted(ctx.settings.llm.choices)) or "none configured"
         directives.ignored.append(f"@llm={directives.llm} (unknown model choice; known: {known})")
+    allowed = [*ctx.settings.images.enabled_providers, "mock"]
+    if directives.provider and directives.provider not in allowed:
+        directives.ignored.append(
+            f"@provider={directives.provider} (not offered here; choose from: {', '.join(allowed)})"
+        )
     file_selects, file_problems = read_selections_file(job.dir, job.state.get("inputs", []))
     directives.select = {**file_selects, **directives.select}  # @select lines win
     directives.ignored += file_problems

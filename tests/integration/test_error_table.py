@@ -26,9 +26,15 @@ ROWS: dict[tuple[str, str], list[str]] = {
     ],
     ("Input", "Password-protected"): ["tests.unit.test_ingest"],
     ("Input", "Scan with no text layer"): ["tests.unit.test_ingest"],
-    ("Input", "Still copying / locked"): [DEFERRED + ": watcher.py (inbox stability check)"],
-    ("Input", "Same PDF dropped twice"): [
-        "tests.integration.test_batch_run::test_batch_folder_makes_one_job_per_pdf_and_subfolder"
+    ("Input", "Item in Input still copying or locked"): [
+        "tests.integration.test_m5_app::test_item_still_copying_cannot_start"
+    ],
+    ("Input", "Same PDF started twice"): [
+        "tests.integration.test_m5_app::test_same_pdf_started_twice_opens_existing_then_start_anyway",
+        "tests.integration.test_batch_run::test_batch_folder_makes_one_job_per_pdf_and_subfolder",
+    ],
+    ("Input", "Copy verification failed at Start"): [
+        "tests.integration.test_m5_app::test_copy_verification_failure_keeps_originals"
     ],
     ("Input", "No elevation or no floor plan"): [
         "tests.integration.test_error_table::test_missing_drawing_type_makes_views_not_ready"
@@ -69,24 +75,62 @@ ROWS: dict[tuple[str, str], list[str]] = {
     ("Review", "Designer flags a render"): [
         "tests.integration.test_m4_review::test_flag_one_regenerates_only_that_render"
     ],
+    ("Corrections", "Correction text tries to act as an instruction"): [
+        "tests.integration.test_m5_app::test_correction_that_looks_like_an_instruction_is_data"
+    ],
+    ("Corrections", "Feedback store not writable"): [
+        "tests.integration.test_m5_app::test_feedback_store_not_writable_warns_and_job_continues"
+    ],
+    ("Corrections", "Export feedback fails"): [
+        "tests.integration.test_m5_app::test_export_feedback_failure_is_plain_and_leaves_no_partial_zip"
+    ],
+    ("Account", "Invalid or missing key at install or first run"): [
+        "tests.integration.test_m5_app::test_missing_key_at_first_run_blocks_start",
+        "tests.integration.test_m5_app::test_settings_never_returns_a_key_and_hides_providers_not_enabled",
+        DEFERRED + ": M6 installer key page",
+    ],
+    ("Account", "Provider enabled without a key"): [
+        "tests.integration.test_m5_app::test_provider_enabled_without_key_is_hidden_and_named"
+    ],
     ("Account", "Key missing/invalid/expired"): [
+        "tests.integration.test_m5_app::test_paused_job_has_its_own_status_and_retry_resumes",
         "tests.integration.test_m2_planning::test_llm_directive_switches_model_and_unknown_is_listed",
         "tests.unit.test_images::test_get_provider",
     ],
     ("Account", "Out of credit / quota / spending limit"): ["tests.integration.test_out_of_credit"],
     ("System", "Disk below 2 GB free"): [
-        "tests.integration.test_error_table::test_low_disk_pauses_and_resumes"
+        "tests.integration.test_error_table::test_low_disk_pauses_and_resumes",
+        "tests.integration.test_m5_app::test_disk_low_blocks_new_jobs_with_a_message",
     ],
     ("System", "Crash, reboot, power loss"): [
         "tests.integration.test_m3_rendering::test_key_problem_pauses_then_resume_skips_finished",
         "tests.integration.test_error_table::test_lock_is_released_when_the_holder_goes_away",
+        "tests.integration.test_m5_app::test_reopening_the_app_resumes_queued_and_running_jobs",
     ],
-    ("System", "Second agent instance"): [
+    ("System", "Second app instance"): [
+        "tests.unit.test_app_launcher::test_second_app_instance_brings_the_window_forward_and_exits",
         "tests.integration.test_error_table::test_second_run_of_the_same_job_does_nothing",
-        DEFERRED + ": watcher.py (agent-wide lock)",
     ],
-    ("System", "Network down"): ["tests.unit.test_llm", DEFERRED + ": watcher.py (keeps queueing)"],
-    ("People", "Approval/review unanswered 2 working days"): [DEFERRED + ": notify.py (reminder)"],
+    ("System", "Port in use"): ["tests.unit.test_app_launcher::test_port_in_use_gives_a_plain_message"],
+    ("System", "WebView2 runtime missing"): [
+        "tests.unit.test_app_launcher::test_webview2_missing_gives_a_plain_message",
+        DEFERRED + ": M6 installer installs it",
+    ],
+    ("System", "Output or History folder not writable"): [
+        "tests.integration.test_m5_app::test_output_not_writable_keeps_job_state",
+        "tests.integration.test_m5_app::test_history_move_failure_still_starts_and_says_so",
+    ],
+    ("System", "Desktop redirected to OneDrive"): [
+        "tests.integration.test_m5_app::test_onedrive_desktop_warns_once"
+    ],
+    ("System", "Network down"): [
+        "tests.unit.test_llm",
+        "tests.integration.test_m5_app::test_reopening_the_app_resumes_queued_and_running_jobs",
+    ],
+    ("People", "Approval/review unanswered 2 working days"): [
+        "tests.integration.test_m5_app::test_status_words_are_plain_and_errors_have_no_trace",
+        DEFERRED + ": notify.py (reminder toasts, phase 2)",
+    ],
     ("Config", "Invalid config or unknown model ID"): ["tests.unit.test_config"],
 }
 

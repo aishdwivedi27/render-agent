@@ -123,6 +123,7 @@ src/render_agent/
   cli.py                 developer entry point: run | resume | approve | review | doctor | app (M5); watch is a phase 2 stub
   config.py              loads config.yaml + .env, validates, exposes typed settings
   errors.py              error taxonomy (transient / permanent / pause / input)
+  doctor.py              health checks shared by `doctor` and the app's Help screen
   logging_setup.py       agent log + per-job log, secrets redacted
   watcher.py             phase 2: automatic start from Input (deferred)
   notify.py              phase 2: Windows toasts and reminders (deferred)
@@ -131,6 +132,8 @@ src/render_agent/
   pipeline/
     job.py               job folder layout, state.json checkpoints, resume
     runner.py            runs stages in order, gate handling, statuses
+    start.py             shared by CLI and app: input grouping, duplicate check, continue_job
+    corrections.py       corrections.json: job-only fact corrections quoted into render prompts
     stages/s1_ingest.py … s9_review.py   one module per stage (see docs/SPEC.md)
   llm/                   call_json interface; openai_llm.py, anthropic_llm.py
   images/                provider interface; openai_images.py, muapi_cli.py, mock.py, budget.py

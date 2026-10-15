@@ -1,4 +1,6 @@
-# Copy to config.yaml. Paths are relative to the install root (the folder holding this file).
+# Copy to config.yaml. knowledge/prompts/schemas are relative to the install root (program folder);
+# every other path is relative to the working root (dev mode: the repo; installed:
+# %LOCALAPPDATA%\RenderAgent, where the app creates config.yaml on first launch).
 paths:
   inbox: inbox
   jobs: jobs
@@ -7,6 +9,7 @@ paths:
   prompts: private/prompts
   schemas: schemas
   logs: logs
+  feedback: feedback          # feedback.jsonl: every flag and correction, all jobs
 
 watcher:
   poll_seconds: 15
@@ -27,6 +30,7 @@ llm:
 
 images:
   provider: openai            # openai | muapi | mock
+  enabled_providers: [openai] # offered in the app; muapi stays in the code (add it here to offer it)
   openai:
     model: gpt-image-2        # or gpt-image-2.5-flare, gpt-image-2.5-sunburst
     size: 1536x1024
@@ -64,3 +68,7 @@ review:
 notify:
   windows_toast: true
   email: {enabled: false, smtp_host: "", smtp_port: 587, from: "", to: []}
+
+designer:
+  desktop: ""                 # empty: the Windows Desktop folder; set a path only for testing
+  folder: RenderAgent         # Desktop\RenderAgent\{Input,Output,History}
