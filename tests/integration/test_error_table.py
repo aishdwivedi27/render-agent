@@ -72,6 +72,9 @@ ROWS: dict[tuple[str, str], list[str]] = {
     ("Rendering", "Drawing check errors or unsure"): [
         "tests.integration.test_m3_rendering::test_check_error_is_not_checked"
     ],
+    ("Rendering", "Drawing check passes with confidence below `drawing_check.min_confidence`"): [
+        "tests.integration.test_m3_drawing_check::test_low_confidence_pass_is_not_checked"
+    ],
     ("Review", "Designer flags a render"): [
         "tests.integration.test_m4_review::test_flag_one_regenerates_only_that_render"
     ],

@@ -39,9 +39,15 @@ class CheckLLM(FakeLLM):
         if isinstance(result, Exception):
             raise result
         note = "ok" if result == "pass" else "extra window on garage wall"
-        checks = [{"check": "extra_openings", "result": result, "note": note}]
+        checks = [{"check": "extra_openings", "result": result, "note": note, "confidence": 0.95}]
         fix = ["Remove the window on the garage wall."] if result == "fail" else []
-        return {"render_id": rid, "checks": checks, "overall": "pass", "fix_instructions": fix}
+        return {
+            "render_id": rid,
+            "checks": checks,
+            "image_match": 0.95,
+            "overall": "pass",
+            "fix_instructions": fix,
+        }
 
 
 def _approved(settings):

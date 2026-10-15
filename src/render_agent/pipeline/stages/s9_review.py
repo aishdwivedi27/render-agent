@@ -52,6 +52,7 @@ def load_review(job_dir: Path) -> dict[str, Any]:
         entry = review["renders"].setdefault(rid, {"status": "pending", "version": None, "history": []})
         ver = latest(rec)
         entry["check"] = checks.get(rid, {}).get("outcome")
+        entry["confidence"] = checks.get(rid, {}).get("confidence")
         if rec["status"] == "skipped":
             entry.update(status="skipped", version=None, reason=rec.get("reason"))
         elif ver is None:
@@ -258,5 +259,7 @@ def review_text(job: Job) -> str:
     for rid, e in review["renders"].items():
         v = f"v{e['version']}" if e.get("version") else "-"
         extra = e.get("note") or e.get("reason") or ""
+        if e.get("confidence") is not None:
+            extra = f"match {e['confidence']:.0%} {extra}".strip()
         lines.append(f"  {rid:40} {e['status']:9} {v:4} {e.get('check') or '':22} {extra}")
     return "\n".join(lines)

@@ -113,6 +113,7 @@ class Gate(_Strict):
 class DrawingCheck(_Strict):
     enabled: bool
     strictness: Literal["standard", "strict"]
+    min_confidence: float = Field(default=0.85, ge=0, le=1)
 
 
 class Ingest(_Strict):

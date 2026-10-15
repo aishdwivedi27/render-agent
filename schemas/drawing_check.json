@@ -32,12 +32,18 @@
           },
           "note": {
             "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
           }
         },
         "required": [
           "check",
           "result",
-          "note"
+          "note",
+          "confidence"
         ],
         "additionalProperties": false
       }
@@ -55,11 +61,17 @@
       "items": {
         "type": "string"
       }
+    },
+    "image_match": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
     }
   },
   "required": [
     "render_id",
     "checks",
+    "image_match",
     "overall",
     "fix_instructions"
   ],

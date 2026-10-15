@@ -50,7 +50,8 @@ def test_check_inputs_and_decision(install_settings, tmp_path, variant):
     expected = "fail" if variant in MUST_FAIL else "pass"
     answer = {
         "render_id": "T-D1-FRONT",
-        "checks": [{"check": "extra_openings", "result": expected, "note": variant}],
+        "checks": [{"check": "extra_openings", "result": expected, "note": variant, "confidence": 0.95}],
+        "image_match": 0.9,
         "overall": "pass",
         "fix_instructions": [],
     }
@@ -89,3 +90,24 @@ def test_paid_vision_check_catches_doctored_image(tmp_path, variant):
     jsonschema.validate(res["answer"], SCHEMA)
     want = "fail" if variant in MUST_FAIL else "pass"
     assert res["overall"] == want, json.dumps(res["answer"], indent=1)
+
+
+def test_low_confidence_pass_is_not_checked(install_settings, tmp_path):
+    answer = {
+        "render_id": "T-D1-FRONT",
+        "checks": [{"check": "extra_openings", "result": "pass", "note": "looks right", "confidence": 0.95}],
+        "image_match": 0.7,
+        "overall": "pass",
+        "fix_instructions": [],
+    }
+    job_dir = tmp_path / "job"
+    make_check_job(job_dir, render_png(MUST_PASS[0]))
+    ver = json.loads((job_dir / "output" / "render_index.json").read_text())["renders"]["T-D1-FRONT"][
+        "versions"
+    ][0]
+    res = _checker(install_settings, job_dir, FakeLLM({"drawing_check": answer})).check_version(
+        "T-D1-FRONT", ver
+    )
+    assert res["overall"] == "unsure"
+    assert res["confidence"] == 0.7
+    assert res["reason"] == "confidence 0.70 is below 0.85"

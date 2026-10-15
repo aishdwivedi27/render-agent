@@ -2,9 +2,11 @@
 (docs/SPEC.md section 6, schemas/drawing_check.json).
 
 Code, not the model, decides the outcome: any failed check -> fail; any unsure (or no checks) ->
-unsure. A fail gets `planning.auto_retries_after_failed_check` regenerations with the fix
-instructions; still failing -> "Failed drawing check". An LLM error, an unsure answer, a dry run or
-a disabled check -> "Not checked" (never silently passed). Writes checks/<id>_vN.json and
+unsure; a pass whose confidence (the lowest of `image_match` and each check's confidence) is below
+`drawing_check.min_confidence` -> unsure. A fail gets `planning.auto_retries_after_failed_check`
+regenerations with the fix instructions; still failing -> "Failed drawing check". An LLM error, an
+unsure answer, a dry run or a disabled check -> "Not checked" (never silently passed).
+Writes checks/<id>_vN.json and
 checks/index.json, then the job waits for review.
 """
 
@@ -32,14 +34,22 @@ PASSED, FAILED, NOT_CHECKED = "Passed drawing check", "Failed drawing check", "N
 log = logging.getLogger("render_agent.s8")
 
 
-def decide(answer: dict[str, Any], render_id: str) -> str:
-    """pass | fail | unsure, recomputed from the individual checks."""
+def confidence(answer: dict[str, Any]) -> float:
+    """How sure the judge is that the render matches: the weakest of image_match and the checks."""
+    values = [answer.get("image_match", 0.0), *(c.get("confidence", 0.0) for c in answer.get("checks", []))]
+    return round(float(min(values)), 3)
+
+
+def decide(answer: dict[str, Any], render_id: str, min_confidence: float = 0.0) -> str:
+    """pass | fail | unsure, recomputed from the individual checks and the confidence floor."""
     results = [c["result"] for c in answer.get("checks", [])]
     if answer.get("render_id") != render_id or not results:
         return "unsure"
     if "fail" in results:
         return "fail"
-    return "unsure" if "unsure" in results else "pass"
+    if "unsure" in results:
+        return "unsure"
+    return "pass" if confidence(answer) >= min_confidence else "unsure"
 
 
 def _norm(s: str) -> str:
@@ -144,7 +154,14 @@ class Checker:
             except AgentError as err:
                 result.update(overall="unsure", reason=f"check failed: {err}")
             else:
-                result.update(answer=answer, overall=decide(answer, render_id))
+                floor = self.ctx.settings.drawing_check.min_confidence
+                result.update(
+                    answer=answer,
+                    confidence=confidence(answer),
+                    overall=decide(answer, render_id, floor),
+                )
+                if result["overall"] == "unsure" and decide(answer, render_id) == "pass":
+                    result["reason"] = f"confidence {result['confidence']:.2f} is below {floor:.2f}"
                 if answer.get("overall") != result["overall"]:
                     result["overall_from_model"] = answer.get("overall")
         atomic_write_json(out_file, result)
@@ -182,6 +199,7 @@ class Checker:
             "outcome": outcome,
             "version": ver["version"],
             "check_file": f"checks/{Path(ver['file']).stem}.json",
+            "confidence": res.get("confidence"),
         }
 
 

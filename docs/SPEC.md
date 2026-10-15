@@ -1,4 +1,4 @@
-Last synced with the live page: 12 Oct 2026
+Last synced with the live page: 15 Oct 2026
 
 # Drawing-to-Render Agent: Specification (developer copy)
 
@@ -181,6 +181,11 @@ from the spec. Hard fail: extra or missing window/door/garage door on a visible 
 or roof form, visibly wrong schedule colour. Tolerated: opening sizes, exact proportions,
 landscaping, people, vehicles, sky. Fail → one automatic regeneration with fix instructions; a
 second fail goes to review marked "Failed drawing check". Error or unsure → "Not checked".
+The judge looks at the image itself and gives each check a `confidence` plus an overall
+`image_match` (0–1). Code takes the lowest of these as the render's confidence; a pass below
+`drawing_check.min_confidence` (0.85) becomes "Not checked" with the reason, and the review card
+shows "N% match". The confidence is self-reported by the model, not calibrated; tune the floor
+against the fixture answer keys in M5.5.
 
 **Designer review (stage 9):** thumbnails grouped by dwelling beside their reference crop and check
 result; Approve / Flag + category + correction; "Regenerate flagged" re-runs stages 6 to 8 for flagged IDs only;
@@ -307,6 +312,7 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | Rendering | No image or unreadable image | Failed attempt; retried once |
 | Rendering | Fails drawing check | One automatic regeneration; second fail → review "Failed drawing check" |
 | Rendering | Drawing check errors or unsure | Review "Not checked"; never silently passed |
+| Rendering | Drawing check passes with confidence below `drawing_check.min_confidence` | Review "Not checked" with "confidence X is below Y"; no regeneration |
 | Review | Designer flags a render | Only that render regenerated; counted and costed |
 | Corrections | Correction text tries to act as an instruction (directive, limit, provider) | Treated as data only, quoted into a labelled prompt block; no behaviour change; shown at the gate/review as entered |
 | Corrections | Feedback store not writable | Warning in the app and logged; the correction still applies to the job; job continues |

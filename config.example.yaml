@@ -55,6 +55,7 @@ gate:
 drawing_check:
   enabled: true
   strictness: standard                   # standard | strict
+  min_confidence: 0.85                   # a pass below this becomes "Not checked"
 
 ingest:
   page_dpi: 200

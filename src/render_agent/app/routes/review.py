@@ -79,6 +79,7 @@ def get_review(job_id: str, ctx: Ctx) -> dict[str, Any]:
                 "reference": refs[0] if refs else None,
                 "check": CHECK_TEXT.get(e.get("check") or "", e.get("check") or "Not checked"),
                 "uncertain": e.get("check") != PASSED,
+                "confidence": e.get("confidence"),
                 "practice": practice(rid, v),
                 "status": e["status"],
                 "status_text": STATUS_TEXT.get(e["status"], e["status"]),
