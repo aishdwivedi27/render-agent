@@ -81,3 +81,35 @@ def test_names_list_dwellings_in_order(tmp_path):
     _clean(tmp_path, r["render_id"], 1, b"e")
     m = export_approved(tmp_path, [r], {r["render_id"]: 1}, [D1, D2, D3], VS)
     assert m[0]["master"] == "output/Common/ensuite_D1-D2-D3.png" and m[0]["covers"] == [D1, D2, D3]
+
+
+def _png(w, h):
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (w, h), "white").save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_final_images_upscaled_to_full_hd(tmp_path):
+    import io
+
+    from PIL import Image
+
+    _clean(tmp_path, "P-D1-FRONT", 1, _png(1536, 1024))
+    entries = export_approved(
+        tmp_path, [_r("P-D1-FRONT", D1, "Front day")], {"P-D1-FRONT": 1}, [D1], VS, 1920
+    )
+    out = tmp_path / entries[0]["copies"][0]
+    assert Image.open(io.BytesIO(out.read_bytes())).size == (1920, 1280)
+    # the clean source in the job is untouched
+    assert Image.open(tmp_path / "output" / "clean" / "P-D1-FRONT_v1.png").size == (1536, 1024)
+
+
+def test_upscale_never_shrinks():
+    from render_agent.output.folders import upscale_png
+
+    data = _png(2400, 1600)
+    assert upscale_png(data, 1920) == data

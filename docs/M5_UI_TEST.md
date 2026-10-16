@@ -50,3 +50,5 @@ call in this checklist is **Test connection** in Settings, which lists models an
 | 21 | Visual refresh | Home with Input empty | A large drop area says "Drag a PDF onto this window" and shows the Input folder path | | |
 | 22 | Visual refresh | Review: approve a few, flag one | The bottom bar keeps a live tally (approved / flagged / waiting); approved cards get a green tick | | |
 | 23 | Review fix | On a practice run, look at a review card, then click the image | The card says "Practice image" and shows a plain house with a clear DRAFT stamp (no prompt text). Clicking opens the render large, next to the drawing it was made from | | |
+| 24 | Polish round | Hover the main button on any screen | It lifts, glows and a light sweep crosses it; pressing it sinks slightly | | |
+| 25 | Polish round | Watch Home, the progress screen and Review | Faint grid background; rows and cards fade in one after another; the progress bar shimmers; review cards lift and the image zooms on hover | | |

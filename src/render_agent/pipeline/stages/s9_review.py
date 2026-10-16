@@ -179,7 +179,14 @@ def deliver(ctx: RunContext, review: dict[str, Any]) -> dict[str, Any]:
     dwellings = read_json(job.dir / "checklist_validation.json", STAGE).get("dwellings", [])
     view_set = load_view_set(ctx.settings.path("knowledge"))
     try:
-        exported = export_approved(job.dir, checklist["RENDER_REQUIREMENTS"], approved, dwellings, view_set)
+        exported = export_approved(
+            job.dir,
+            checklist["RENDER_REQUIREMENTS"],
+            approved,
+            dwellings,
+            view_set,
+            ctx.settings.images.final_long_edge,
+        )
     except FileNotFoundError as exc:
         raise PermanentError(
             code="EXPORT_SOURCE_MISSING",

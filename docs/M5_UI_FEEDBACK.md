@@ -9,4 +9,5 @@ in the Response column and in `docs/M5_UI_TEST.md`.
 
 | # | Screen | What you saw / what should change | Status | Response (Claude Code) |
 | --- | --- | --- | --- | --- |
-| 1 | | | open | |
+| 1 | All | Fonts and buttons should look more polished | done | New type pair (Bricolage Grotesque headings, Inter Tight body); main button has depth, glow, lift and a light sweep on hover; approve/flag tinted; link buttons get an animated underline |
+| 2 | All | Add effects so it looks impressive | done | Faint blueprint grid background, card lift and image zoom, staggered entrance, progress-bar shimmer, pulsing current step, side-rail active bar; all motion off under reduced-motion |

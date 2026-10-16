@@ -40,6 +40,7 @@ images:
     generate_model: nano-banana-2
     timeout_seconds: 600
   references_per_render: 3
+  final_long_edge: 1920       # Final images are upscaled to Full HD width; size must be at least 1280x720, quality high
   concurrency: 2
   retries: 5
 

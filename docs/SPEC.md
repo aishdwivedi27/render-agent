@@ -1,4 +1,4 @@
-Last synced with the live page: 15 Oct 2026
+Last synced with the live page: 16 Oct 2026
 
 # Drawing-to-Render Agent: Specification (developer copy)
 
@@ -337,7 +337,7 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 Config (`config.yaml` in the working root; keys in Windows Credential Manager): LLM provider/model
 per stage; image provider/model; `images.enabled_providers` (first release: `openai` only; `muapi`
 stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, checked by
-`budget.py`); image size and quality; references per render (3); planned renders per dwelling
+`budget.py`); image size and quality (HD minimum, refused at load otherwise: size at least 1280×720 in either orientation, no `auto`, quality `high`; default 1536×1024); `images.final_long_edge` (1920, at least 1280: approved images in Final are upscaled locally, Lanczos, never shrunk, to this long edge; job and Draft copies keep the model's size); references per render (3); planned renders per dwelling
 (≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`); render concurrency (2); approval gate
 (on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
 

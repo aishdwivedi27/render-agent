@@ -10,9 +10,12 @@ master and every copy.
 
 from __future__ import annotations
 
+import io
 import re
 from pathlib import Path
 from typing import Any
+
+from PIL import Image
 
 from render_agent.util.fs import atomic_write_bytes, safe_name, sha256_file
 from render_agent.validate.checklist_validator import Options, ViewRules, dwelling_code
@@ -30,17 +33,34 @@ def file_name(render: dict[str, Any], covers: list[str], dwellings: list[str], r
     return safe_name(f"{view}_{codes}.png", 100)
 
 
+def upscale_png(data: bytes, long_edge: int) -> bytes:
+    """Resizes a PNG up (Lanczos) so its long edge is at least long_edge; never shrinks."""
+    if long_edge <= 0:
+        return data
+    with Image.open(io.BytesIO(data)) as im:
+        w, h = im.size
+        if max(w, h) >= long_edge:
+            return data
+        scale = long_edge / max(w, h)
+        big = im.resize((round(w * scale), round(h * scale)), Image.Resampling.LANCZOS)
+        buf = io.BytesIO()
+        big.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
+
+
 def export_approved(
     job_dir: Path,
     renders: list[dict[str, Any]],
     approved: dict[str, int],
     dwellings: list[str],
     view_set: dict[str, Any],
+    final_long_edge: int = 0,
 ) -> list[dict[str, Any]]:
     """Copies each approved render's clean version out; returns manifest entries.
 
     renders: checklist RENDER_REQUIREMENTS (render_id, dwelling_id, view_type, location, ...)
     approved: render_id -> approved version number
+    final_long_edge: exported copies are upscaled to this long edge (0 keeps the source size)
     """
     cfg = view_set.get("output_folders", {})
     shared_name = cfg.get("shared_folder", "Common")
@@ -58,7 +78,7 @@ def export_approved(
         clean = out_root / "clean" / f"{safe_name(rid, 80)}_v{approved[rid]}.png"
         if not clean.is_file():
             raise FileNotFoundError(f"approved render {rid} v{approved[rid]} has no clean copy: {clean}")
-        data = clean.read_bytes()
+        data = upscale_png(clean.read_bytes(), final_long_edge)
         covers = [d for d in dwellings if d in rules.covers(r)] or [r["dwelling_id"]]  # D1-D2-D3 order
         name = file_name(r, covers, dwellings, rules)
         if name in used:  # two renders of the same view for the same dwellings

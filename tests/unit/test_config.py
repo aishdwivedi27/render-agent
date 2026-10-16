@@ -97,3 +97,19 @@ def test_keys_load_from_dotenv_and_env_wins(install, monkeypatch):
     assert "sk-from-dotenv" not in repr(s)
     monkeypatch.setenv("OPENAI_API_KEY", "sk-from-env-abcdef")
     assert load_config(install).secret("OPENAI_API_KEY") == "sk-from-env-abcdef"
+
+
+@pytest.mark.parametrize("size", ["1024x1024", "1280x640", "auto"])
+def test_render_size_must_be_hd(install, size):
+    _edit(install, lambda c: c["images"]["openai"].update(size=size))
+    assert "images.openai.size" in _invalid(install).what_happened
+
+
+def test_render_quality_must_be_high(install):
+    _edit(install, lambda c: c["images"]["openai"].update(quality="medium"))
+    assert "images.openai.quality" in _invalid(install).what_happened
+
+
+def test_final_long_edge_below_hd_refused(install):
+    _edit(install, lambda c: c["images"].update(final_long_edge=800))
+    assert "images.final_long_edge" in _invalid(install).what_happened

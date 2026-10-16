@@ -20,7 +20,7 @@ from typing import Annotated, Any, Literal
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, SecretStr, ValidationError
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 
 from render_agent.errors import PermanentError
 
@@ -77,10 +77,22 @@ class LLM(_Strict):
     choices: dict[str, StageLLM] = Field(default_factory=dict)  # names for @llm=<name>
 
 
+HD_MIN_LONG_EDGE = 1280  # 720p class: the smallest render the agent accepts
+HD_MIN_SHORT_EDGE = 720
+
+
 class OpenAIImages(_Strict):
     model: ModelId
-    size: str = Field(pattern=r"^\d+x\d+$|^auto$")
-    quality: Literal["low", "medium", "high", "auto"]
+    size: str = Field(pattern=r"^\d+x\d+$")
+    quality: Literal["high"]  # renders are always HD; lower qualities are refused at load
+
+    @field_validator("size")
+    @classmethod
+    def _hd_size(cls, v: str) -> str:
+        w, h = sorted(int(x) for x in v.split("x"))
+        if h < HD_MIN_LONG_EDGE or w < HD_MIN_SHORT_EDGE:
+            raise ValueError(f"size {v} is below HD ({HD_MIN_LONG_EDGE}x{HD_MIN_SHORT_EDGE} minimum)")
+        return v
 
 
 class MuapiImages(_Strict):
@@ -95,6 +107,7 @@ class Images(_Strict):
     openai: OpenAIImages
     muapi: MuapiImages
     references_per_render: int = Field(ge=0)
+    final_long_edge: int = Field(default=1920, ge=HD_MIN_LONG_EDGE)  # Final images are resized up to this
     concurrency: int = Field(ge=1)
     retries: int = Field(ge=0)
 
