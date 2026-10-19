@@ -264,11 +264,12 @@ async function reviewScreen(job, meta, warn) {
         <div class="meta">${c.practice ? '<span class="pill wait" title="Made by a practice run: a stand-in picture, not a render">Practice image</span>' : ""}<span class="pill ${c.check.startsWith("Did not") ? "bad" : c.check.startsWith("Matches") ? "good" : ""}">${esc(c.check)}${c.confidence != null ? ` · ${Math.round(c.confidence * 100)}% match` : ""}</span>${c.status !== "pending" ? `<span class="pill ${c.status === "approved" ? "good" : c.status === "flagged" ? "bad" : ""}">${esc(c.status_text)}</span>` : ""}</div>
         ${c.note ? `<p>${esc(c.note)}</p>` : ""}
         ${c.status === "pending" && state.flagOpen !== c.render_id ? `<div class="buttons"><button class="approve" data-ok="${esc(c.render_id)}">Approve</button><button class="flag" data-flag="${esc(c.render_id)}">Flag</button></div>` : ""}
+        ${c.status === "flagged" && state.flagOpen !== c.render_id ? `<div class="buttons"><button data-flag="${esc(c.render_id)}">Edit feedback</button></div>` : ""}
         ${state.flagOpen === c.render_id ? `<div class="flagform"><label for="cat">What is wrong?</label><select id="cat">${cats}</select>
-          <label for="note">What should change?</label><textarea id="note" rows="3" placeholder="e.g. Remove the window on the garage wall"></textarea>
+          <label for="note">What should change?</label><textarea id="note" rows="3" placeholder="e.g. Remove the window on the garage wall">${c.status === "flagged" ? esc(c.note) : ""}</textarea>
           <label class="check"><input type="checkbox" id="tojob"> Also use this for the rest of this job</label>
           <label class="check"><input type="checkbox" id="rule"> Suggest this as a general rule</label>
-          <div class="buttons"><button class="flag" id="send-flag">Flag this render</button><button id="cancel-flag">Cancel</button></div></div>` : ""}
+          <div class="buttons"><button class="flag" id="send-flag">${c.status === "flagged" ? "Save feedback" : "Flag this render"}</button><button id="cancel-flag">Cancel</button></div></div>` : ""}
       </div></article>`).join("");
   const label = flagged ? `Continue: redo ${flagged} flagged` : pending ? "Continue" : "Finish";
   view.innerHTML = head("Ready for your review", "Approve the renders you are happy with. Flag the others with what to change: only flagged renders are made again.", meta, 3)
@@ -285,7 +286,11 @@ async function reviewScreen(job, meta, warn) {
     catch (e) { document.getElementById("msg").innerHTML = problem(e.data); }
   };
   view.querySelectorAll("[data-ok]").forEach((b) => (b.onclick = async () => { await decide(b.dataset.ok, { action: "approve" }); reviewScreen(job, meta, warn); }));
-  view.querySelectorAll("[data-flag]").forEach((b) => (b.onclick = () => { state.flagOpen = b.dataset.flag; reviewScreen(job, meta, warn).then(() => document.getElementById("note")?.focus()); }));
+  view.querySelectorAll("[data-flag]").forEach((b) => (b.onclick = () => { state.flagOpen = b.dataset.flag; reviewScreen(job, meta, warn).then(() => {
+    const cat = document.getElementById("cat"), was = r.cards.find((c) => c.render_id === b.dataset.flag)?.category;
+    if (cat && was) cat.value = was;
+    document.getElementById("note")?.focus();
+  }); }));
   const send = document.getElementById("send-flag");
   if (send) send.onclick = async () => {
     const note = document.getElementById("note").value.trim();

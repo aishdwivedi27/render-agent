@@ -14,7 +14,7 @@ from render_agent.images import MockProvider
 from render_agent.pipeline import gate
 from render_agent.pipeline.job import load_job
 from render_agent.pipeline.runner import RunContext, run_job
-from tests.conftest import FIXTURE_01, make_pdf
+from tests.conftest import FIXTURE_01, fixture_pdf, make_pdf
 from tests.fakes import FakeLLM
 from tests.integration.test_m2_planning import _llm, _start
 
@@ -185,7 +185,7 @@ def test_not_ready_renders_are_skipped(install_settings):
 def test_dry_run_cli_reaches_review(install, monkeypatch, capsys):
     """`run --dry-run` on a real fixture PDF: mock renders with DRAFT overlay, checks 'Not checked'."""
     monkeypatch.setenv("RENDER_AGENT_HOME", str(install))
-    pdf = next(FIXTURE_01.glob("*.pdf"), None) or make_pdf(install / "x.pdf", ["ELEVATION"])
+    pdf = fixture_pdf(FIXTURE_01) or make_pdf(install / "x.pdf", ["ELEVATION"])
     assert main(["run", str(pdf), "--dry-run"]) == 0
     job_dir = next((install / "jobs").iterdir())
     approval = json.loads((job_dir / "approval.json").read_text())

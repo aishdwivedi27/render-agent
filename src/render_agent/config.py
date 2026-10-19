@@ -110,6 +110,7 @@ class Images(_Strict):
     final_long_edge: int = Field(default=1920, ge=HD_MIN_LONG_EDGE)  # Final images are resized up to this
     concurrency: int = Field(ge=1)
     retries: int = Field(ge=0)
+    max_images_per_round: int | None = Field(default=None, ge=1)  # M5.5 cap on paid calls per job run
 
 
 class Planning(_Strict):

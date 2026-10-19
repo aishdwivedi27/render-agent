@@ -25,7 +25,16 @@ from typing import Any
 
 import yaml
 
-SKIP_SECTIONS = {"fixture", "pdf", "must_not_appear", "expected_contradictions"}
+SKIP_SECTIONS = {
+    "fixture",
+    "pdf",
+    "status",
+    "verified_by",
+    "verified_on",
+    "holdout",
+    "must_not_appear",
+    "expected_contradictions",
+}
 MANUAL_KEYS = {"relationships"}
 NEAR_RATIO = 0.75
 
@@ -55,9 +64,46 @@ def strings(node: Any, path: str = "") -> list[tuple[str, str]]:
     return out
 
 
+def is_leaf(node: Any) -> bool:
+    """A drafted value: {value: ..., verified: bool} (scripts/draft_answer_key.py)."""
+    return isinstance(node, dict) and set(node) == {"value", "verified"}
+
+
+def unwrap(node: Any) -> Any:
+    return node["value"] if is_leaf(node) else node
+
+
+def is_verified(key: dict[str, Any]) -> bool:
+    """A key counts as verified when a person signed it off and no drafted value is still unverified.
+
+    Plain keys (no {value, verified} leaves) need verified_by and verified_on; drafted keys also need
+    status: verified and every leaf verified: true.
+    """
+    if not (key.get("verified_by") and key.get("verified_on")):
+        return False
+    leaves: list[Any] = []
+
+    def walk(n: Any) -> None:
+        if is_leaf(n):
+            leaves.append(n)
+        elif isinstance(n, dict):
+            for v in n.values():
+                walk(v)
+        elif isinstance(n, list):
+            for v in n:
+                walk(v)
+
+    walk(key)
+    if not leaves:
+        return key.get("status", "verified") == "verified"
+    return key.get("status") == "verified" and all(leaf["verified"] is True for leaf in leaves)
+
+
 def key_items(node: Any, path: str = "") -> list[tuple[str, Any]]:
     out: list[tuple[str, Any]] = []
-    if isinstance(node, dict):
+    if is_leaf(node):
+        out.append((path, node["value"]))
+    elif isinstance(node, dict):
         for k, v in node.items():
             if not path and k in SKIP_SECTIONS:
                 continue
@@ -161,7 +207,7 @@ def grade(spec: dict[str, Any], key: dict[str, Any], page_texts: dict[int, str] 
                 Item(path, text, "key_unverified", "not in the spec or the PDF text layer; check the image")
             )
 
-    for term in key.get("must_not_appear", []):
+    for term in map(unwrap, key.get("must_not_appear", [])):
         hit = _find(term, spec_strings)
         if hit is None:
             report.forbidden.append(Item("must_not_appear", term, "absent"))
@@ -172,7 +218,7 @@ def grade(spec: dict[str, Any], key: dict[str, Any], page_texts: dict[int, str] 
         report.forbidden.append(Item("must_not_appear", term, status, detail))
 
     flagged_blob = norm(json.dumps(spec.get("UNCERTAINTIES", spec), ensure_ascii=False))
-    for c in key.get("expected_contradictions", []):
+    for c in map(unwrap, key.get("expected_contradictions", [])):
         coded = [t for t in tokens(c) if re.fullmatch(r"\d+-\d+", t)]  # label codes like 21-12
         words = [t for t in tokens(c) if len(t) >= 5]
         coded_ok = all(t in flagged_blob for t in coded)

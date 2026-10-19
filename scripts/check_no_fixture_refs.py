@@ -1,6 +1,6 @@
 """Fail if rules, prompts, schemas or code mention a specific fixture project.
 
-Forbidden terms are collected from every private/fixtures/*/answer_key.yaml (project number,
+Forbidden terms are collected from every private/fixtures/*/answer_key*.yaml, drafts included (project number,
 address words, client name), so adding a fixture automatically extends the check.
 Exit code 0 = clean, 1 = leaks found.
 """
@@ -37,9 +37,12 @@ GENERIC_WORDS = {
 
 def forbidden_terms() -> set[str]:
     terms: set[str] = set()
-    for key_file in (ROOT / "private" / "fixtures").glob("*/answer_key.yaml"):
+    for key_file in (ROOT / "private" / "fixtures").glob("*/answer_key*.yaml"):
         data = yaml.safe_load(key_file.read_text(encoding="utf-8")) or {}
-        project = data.get("project", {})
+        project = {
+            k: v["value"] if isinstance(v, dict) and "value" in v else v
+            for k, v in data.get("project", {}).items()
+        }
         if project.get("project_number"):
             terms.add(str(project["project_number"]))
         if project.get("client"):

@@ -97,6 +97,26 @@ def test_budget_refuses_paid_call_over_allowance(tmp_path):
         Budget(tmp_path, {}).reserve("RX", "D9", "first", "openai", True)  # unplanned dwelling
 
 
+def test_round_cap_pauses_before_next_paid_call(tmp_path):
+    b = Budget(tmp_path, {"D1": 10}, round_cap=2)
+    b.reserve("R1", "D1", "first", "openai", True)
+    b.reserve("R1", "D1", "review", "openai", True)  # reviews count toward the round cap
+    b.reserve("R2", "D1", "first", "mock", False)  # free calls never refused
+    with pytest.raises(PauseJobError) as e:
+        b.reserve("R2", "D1", "first", "openai", True)
+    assert e.value.code == "ROUND_CAP_REACHED"
+    assert b.summary()["paid_total"] == 2
+    again = Budget(tmp_path, {"D1": 10}, round_cap=2)  # persisted across resume
+    with pytest.raises(PauseJobError):
+        again.reserve("R3", "D1", "first", "openai", True)
+    raised = Budget(tmp_path, {"D1": 10}, round_cap=3)  # owner approves a higher cap
+    raised.reserve("R3", "D1", "first", "openai", True)
+    (tmp_path / "x").mkdir()
+    off = Budget(tmp_path / "x", {"D1": 10})
+    for i in range(5):
+        off.reserve(f"R{i}", "D1", "first", "openai", True)  # None = no round cap
+
+
 def test_overlay_changes_pixels_and_keeps_size():
     clean = _png((90, 90, 90), (600, 400))
     draft = draft_overlay(clean)

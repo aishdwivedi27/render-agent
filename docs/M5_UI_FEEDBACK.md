@@ -1,5 +1,7 @@
 # M5 UI feedback
 
+M5 signed off 2026-10-16
+
 <!-- When the app is right, write on the first line above this comment:  M5 signed off <YYYY-MM-DD>
      M5.5 cannot start until that line exists. -->
 

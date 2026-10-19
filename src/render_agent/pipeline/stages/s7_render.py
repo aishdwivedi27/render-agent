@@ -60,6 +60,7 @@ class Renderer:
         self.budget = Budget(
             self.job_dir,
             allowances(dict(planned), p.max_planned_renders_per_dwelling, p.auto_retries_after_failed_check),
+            ctx.settings.images.max_images_per_round,
         )
         self.wait = ctx.extras.get("image_wait")
 

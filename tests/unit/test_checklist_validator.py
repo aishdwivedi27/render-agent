@@ -464,3 +464,13 @@ def test_rear_needs_a_documented_outdoor_structure():
     assert qualifying_dwellings(
         {**spec, "EXTERNAL_ARCHITECTURE": {"other_explicit_external_features": ["ALL: ALFRESCO"]}}, VIEW_SET
     )["rear_day"] == {D1, D2, D3}
+
+
+def test_rear_view_kept_when_outdoor_area_is_a_floor_plan_space():
+    """An alfresco recorded only as a floor-plan space or room connection still qualifies."""
+    for key in ("other_identifiable_spaces", "room_connections"):
+        spec = {
+            "DWELLINGS": [{"dwelling_id": D1}],
+            "FLOOR_PLAN": [{"dwelling_id": D1, "deck": "NOT FOUND", key: ["ALFRESCO: 3440 by 3090"]}],
+        }
+        assert qualifying_dwellings(spec, VIEW_SET)["rear_day"] == {D1}

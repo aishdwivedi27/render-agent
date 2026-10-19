@@ -6,7 +6,7 @@ from render_agent.errors import InputError
 from render_agent.pipeline.job import new_job
 from render_agent.pipeline.runner import RunContext
 from render_agent.pipeline.stages import s1_ingest
-from tests.conftest import FIXTURE_01, make_pdf
+from tests.conftest import FIXTURE_01, fixture_pdf, make_pdf
 
 
 def _ingest(settings, inputs):
@@ -64,6 +64,6 @@ def test_size_limit(install):
 
 
 def test_real_fixture_has_text_layer(install, install_settings):
-    pdf = next(FIXTURE_01.glob("*.pdf"))
+    pdf = fixture_pdf(FIXTURE_01)
     _, info = _ingest(install_settings, [pdf])
     assert info["page_count"] >= 3 and info["scanned_pages"] == []

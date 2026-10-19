@@ -111,7 +111,7 @@ Everyday:
 | Lint and format | `ruff check . && ruff format .` | `ruff check . ; ruff format .` |
 | Type check | `mypy src` | `mypy src` |
 | Health check | `python -m render_agent doctor` | `python -m render_agent doctor` |
-| One job, no spend | `python -m render_agent run private/fixtures/fixture_01 --dry-run` | same command |
+| One job, no spend | `python -m render_agent run private/fixtures/fixture_01/input --dry-run` | same command |
 | Launch the app (dev mode, from M5) | `python -m render_agent app` | `python -m render_agent app` |
 | Build Setup.exe (available from M6) | PowerShell only | `.\scripts\build_installer.ps1` |
 | Resume a job | `python -m render_agent resume jobs/<job-id>` | `python -m render_agent resume jobs\<job-id>` |

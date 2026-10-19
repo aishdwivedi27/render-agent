@@ -10,14 +10,14 @@ import pytest
 from render_agent.config import load_config
 from render_agent.pipeline.job import new_job
 from render_agent.pipeline.runner import RunContext, run_job
-from tests.conftest import FIXTURE_01, ROOT
+from tests.conftest import FIXTURE_01, ROOT, fixture_pdf
 from tests.grade_extraction import grade_job
 
 
 @pytest.mark.paid
 def test_fixture01_extraction_gate():
     settings = load_config(ROOT)
-    job = new_job(settings.path("jobs"), [next(FIXTURE_01.glob("*.pdf"))])
+    job = new_job(settings.path("jobs"), [fixture_pdf(FIXTURE_01)])
     res = run_job(RunContext(job, settings), {"s5_checklist": None})  # extraction only
     assert res.stopped_at == "s5_checklist", res.message
     report = grade_job(job.dir, FIXTURE_01)

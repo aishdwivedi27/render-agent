@@ -8,7 +8,7 @@ from tenacity import wait_none
 from render_agent.llm.base import BaseLLM, SendResult
 from render_agent.pipeline.job import load_job, new_job
 from render_agent.pipeline.runner import RunContext, run_job
-from tests.conftest import FIXTURE_01, make_pdf
+from tests.conftest import FIXTURE_01, fixture_pdf, make_pdf
 from tests.fakes import FakeLLM, minimal_instance
 
 
@@ -38,7 +38,7 @@ def _run(settings, inputs, llm, **kw):
 
 
 def test_fixture01_stages_1_to_4_with_fake_llm(install_settings):
-    pdf = next(FIXTURE_01.glob("*.pdf"))
+    pdf = fixture_pdf(FIXTURE_01)
     good, bad = _view("S3-ELEV1", (0.1, 0.2, 0.5, 0.6)), _view("S3-BAD", (0.7, 0.7, 0.2, 0.9))
     llm = FakeLLM({"sheet_analysis.page-3": _sheet([good, bad])})
     job, res = _run(install_settings, [pdf], llm)

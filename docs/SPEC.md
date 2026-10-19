@@ -313,6 +313,7 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | Rendering | Fails drawing check | One automatic regeneration; second fail → review "Failed drawing check" |
 | Rendering | Drawing check errors or unsure | Review "Not checked"; never silently passed |
 | Rendering | Drawing check passes with confidence below `drawing_check.min_confidence` | Review "Not checked" with "confidence X is below Y"; no regeneration |
+| Rendering | Paid image calls reach `images.max_images_per_round` (M5.5 refinement cap) | Job PAUSES with code ROUND_CAP_REACHED before the next paid call; finished renders kept; owner approves a higher cap, then Retry resumes |
 | Review | Designer flags a render | Only that render regenerated; counted and costed |
 | Corrections | Correction text tries to act as an instruction (directive, limit, provider) | Treated as data only, quoted into a labelled prompt block; no behaviour change; shown at the gate/review as entered |
 | Corrections | Feedback store not writable | Warning in the app and logged; the correction still applies to the job; job continues |

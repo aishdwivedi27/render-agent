@@ -26,3 +26,6 @@ htmlcov/
 # --- Local editor and run settings (may hold client file paths) ---
 .vscode/launch.json
 .claude/settings.local.json
+
+# M5.5 comparison pages (contain private renders)
+runs/

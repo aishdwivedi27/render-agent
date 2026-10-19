@@ -16,6 +16,11 @@ os.environ["RENDER_AGENT_NO_KEYRING"] = "1"  # never read a real key from Creden
 FIXTURE_01 = ROOT / "private" / "fixtures" / "fixture_01"
 
 
+def fixture_pdf(fixture_dir: Path) -> Path | None:
+    """A fixture's drawing PDF: input/ (M5.5 layout), else the fixture root (older layout)."""
+    return next(fixture_dir.glob("input/*.pdf"), None) or next(fixture_dir.glob("*.pdf"), None)
+
+
 @pytest.fixture
 def install(tmp_path, monkeypatch):
     """An install root without keys (no .env, key env vars cleared)."""

@@ -59,7 +59,8 @@ def sha256_file(path: Path, chunk: int = 1 << 20) -> str:
 def safe_name(text: str, max_len: int = 80) -> str:
     """A Windows-safe file or folder name."""
     cleaned = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text).strip(" .")
-    return cleaned[:max_len] or "unnamed"
+    # strip again: truncation can leave a trailing space or dot, which Windows rejects
+    return cleaned[:max_len].rstrip(" .") or "unnamed"
 
 
 def read_text(path: Path) -> str:

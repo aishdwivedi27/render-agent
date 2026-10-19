@@ -43,6 +43,7 @@ images:
   final_long_edge: 1920       # Final images are upscaled to Full HD width; size must be at least 1280x720, quality high
   concurrency: 2
   retries: 5
+  max_images_per_round: null  # M5.5 refinement: cap on paid image calls per job run (null = off)
 
 planning:
   max_planned_renders_per_dwelling: 16   # hard limit; see knowledge/view_set.yaml

@@ -69,3 +69,8 @@ def test_atomic_write_retries_while_windows_holds_the_file(tmp_path, monkeypatch
     fs.atomic_write_text(tmp_path / "a.json", "{}")
     assert (tmp_path / "a.json").read_text() == "{}" and calls["n"] == 3
     assert not list(tmp_path.glob(".*.tmp"))
+
+
+def test_safe_name_truncation_never_ends_in_space_or_dot():
+    assert safe_name("Plan - Lot 1 - Stage. Two", 13) == "Plan - Lot 1"
+    assert safe_name("abc . def", 5) == "abc"

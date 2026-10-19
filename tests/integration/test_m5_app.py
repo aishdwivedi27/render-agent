@@ -24,7 +24,7 @@ from render_agent.config import load_config
 from render_agent.images import MockProvider
 from render_agent.pipeline.job import load_job
 from render_agent.util.fs import sha256_file
-from tests.conftest import FIXTURE_01, make_pdf
+from tests.conftest import FIXTURE_01, fixture_pdf, make_pdf
 from tests.integration.test_m3_rendering import CheckLLM, wait_none
 
 TOKEN = "test-token"
@@ -84,9 +84,7 @@ def env(install, tmp_path, monkeypatch):
 
 
 def _fixture_pdf(env: Env) -> Path:
-    return next(FIXTURE_01.glob("*.pdf"), None) or make_pdf(
-        env.install / "x.pdf", ["ELEVATIONS", "FLOOR PLAN"]
-    )
+    return fixture_pdf(FIXTURE_01) or make_pdf(env.install / "x.pdf", ["ELEVATIONS", "FLOOR PLAN"])
 
 
 def _tree(root: Path) -> dict[str, str]:
@@ -516,3 +514,32 @@ def test_dragged_pdf_goes_to_input(env):
         "/api/inputs/upload", files={"file": ("notes.docx", b"x")}, headers={TOKEN_HEADER: TOKEN}
     )
     assert r.status_code == 400 and "not a PDF" in r.json()["what_happened"]
+
+
+def test_editing_feedback_on_a_flagged_render_uses_the_new_note(env):
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    _approve(env, job_id)
+    env.drain()
+    rid = next(c for c in env.client.get(f"/api/jobs/{job_id}/review").json()["cards"] if c["image"])[
+        "render_id"
+    ]
+    url = f"/api/jobs/{job_id}/review/{rid}"
+    assert env.post(url, {"action": "flag", "category": "other", "note": "first try"}).status_code == 200
+    r = env.post(url, {"action": "flag", "category": "framing", "note": "the WIR sits beside the ensuite"})
+    assert r.status_code == 200, r.json()
+    card = next(
+        c for c in env.client.get(f"/api/jobs/{job_id}/review").json()["cards"] if c["render_id"] == rid
+    )
+    assert card["status"] == "flagged" and card["note"] == "the WIR sits beside the ensuite"
+    env.provider.calls.clear()
+    env.post(f"/api/jobs/{job_id}/review/continue")
+    env.drain()
+    [call] = [c for c in env.provider.calls if c.render_id == rid]
+    assert "the WIR sits beside the ensuite" in call.prompt and "first try" not in call.prompt
+    lines = (env.settings.path("feedback") / "feedback.jsonl").read_text(encoding="utf-8").splitlines()
+    assert [json.loads(x)["correction"] for x in lines][-2:] == [
+        "first try",
+        "the WIR sits beside the ensuite",
+    ]

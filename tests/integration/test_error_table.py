@@ -25,6 +25,9 @@ ROWS: dict[tuple[str, str], list[str]] = {
         "tests.integration.test_batch_run::test_batch_folder_makes_one_job_per_pdf_and_subfolder",
     ],
     ("Input", "Password-protected"): ["tests.unit.test_ingest"],
+    ("Rendering", "Paid image calls reach `images.max_images_per_round`"): [
+        "tests.unit.test_images::test_round_cap_pauses_before_next_paid_call"
+    ],
     ("Input", "Scan with no text layer"): ["tests.unit.test_ingest"],
     ("Input", "Item in Input still copying or locked"): [
         "tests.integration.test_m5_app::test_item_still_copying_cannot_start"
