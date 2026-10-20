@@ -1,4 +1,4 @@
-Last synced with the live page: 16 Oct 2026
+Last synced with the live page: 20 Oct 2026
 
 # Drawing-to-Render Agent: Specification (developer copy)
 
@@ -41,8 +41,8 @@ agent reads the drawings, plans views from the standard view set, reads material
 **approval gate (always on)**, Approval screen: designer confirms views and materials, fills gaps and
 corrects facts → render (Progress screen) → drawing check (one automatic regeneration on fail) →
 **thumbnail review**, Review screen: designer approves or flags individual renders with a category and
-a note; only flagged renders are regenerated → final set in `Output\<input name>\Final`, filed by
-dwelling. A failed job shows its plain-English `error.json` text in the app, with a Retry button.
+a note; only flagged renders are regenerated → approved set in `Output\<input name>\<Dwelling N>\FINAL APPROVED`,
+filed by dwelling. A failed job shows its plain-English `error.json` text in the app, with a Retry button.
 Developers can still drive every step from the CLI.
 
 ## 3. Functional requirements
@@ -123,10 +123,11 @@ show every documented window and door in position, and doors in their documented
 show are REVIEW items, never blockers on their own. Renders are artist's impressions.
 
 **Draft overlay** (decision 13 Oct 2026): every render is shown and delivered with a visible "DRAFT"
-overlay until the designer approves it at review. The clean image is kept only inside the job folder
-(`output/clean/`) and is never copied to the dwelling folders while unapproved. Approving a render
-copies the clean version out without the overlay; uncertain details are dealt with at review, not
-marked on the image.
+overlay until the designer approves it at review. The overlay-free copy is kept only inside the job
+folder (`output/clean/`), only for the latest version of each render (a replaced version's copy is
+deleted), and is deleted once that version is delivered (decision 20 Oct 2026). Approving a render
+delivers it without the overlay to `FINAL APPROVED` and copies its overlay version to
+`Draft/draft-final`; uncertain details are dealt with at review, not marked on the image.
 
 **Output folders** (`knowledge/view_set.yaml: output_folders`)
 ```
@@ -138,9 +139,11 @@ output/
   report.html  manifest.json
 ```
 Regenerating a shared render replaces the master and every copy; `manifest.json` records copies.
-A single-house job has no `Common` folder. This is the job's working `output/`; for designers the
-approved clean images are delivered in the same `Common` / `Dwelling N` layout under
-`Output\<input name>\Final\` (§8).
+A single-house job has no `Common` folder. Inside each `Common` / `Dwelling N` folder: `Draft\` (every
+version with the overlay), `Draft\draft-final\` (the approved version with the overlay) and
+`FINAL APPROVED\` (the approved version without it, at `images.delivery_size`); folder names come from
+`knowledge/view_set.yaml` `output_folders` (decision 20 Oct 2026). This is the job's working `output/`;
+designers get the same layout under `Output\<input name>\` (§8).
 
 ## 5. Knowledge base and precedence
 
@@ -154,9 +157,9 @@ hashes in `manifest.json`. See `knowledge/README.md`.
 | # | Stage | Output | Engine |
 | --- | --- | --- | --- |
 | 1 | Ingest | `pages/page-N.png` (DPI from config), `pages/page-N.txt`, `ingest.json` | PyMuPDF |
-| 2 | Sheet analysis | `sheets/sheet-N.json` (sheet type, views with normalised bboxes, findings) | Vision LLM, one call per page, image + text layer |
+| 2 | Sheet analysis | `sheets/sheet-N.json` (sheet type, north arrow angle, views with normalised bboxes, room layouts, findings) | Vision LLM, one call per page, image + text layer |
 | 3 | Evidence | `evidence.json` | LLM, `schemas/evidence.json` |
-| 4 | House spec | `house_specification.json` | LLM, `schemas/house_spec.json` |
+| 4 | House spec | `house_specification.json` (ROOMS copied by code from the sheets) | LLM, `schemas/house_spec.json` |
 | 5 | Checklist + selections | `checklist.json`, `checklist_validation.json`, `selections.json` | LLM then deterministic validator |
 | Gate | Approval (always on) | `approval.json`, `corrections.json` | Designer in the desktop app (Approval screen); developers: `APPROVE` file or CLI |
 | 6 | Prompts | `prompts/<render_id>.txt`, `references/<view_id>.png` | LLM scene text; code assembles |
@@ -167,8 +170,23 @@ hashes in `manifest.json`. See `knowledge/README.md`.
 **Prompt assembly (stage 6), in order:** fixed identity block from the spec (construction, roof and
 pitch, eaves, storeys, every colour-schedule line; identical in every prompt for that dwelling) →
 reference legend ("Image 1 is Elevation 1 (street front), sheet 3") → scene/camera/lighting from the
-LLM → must-preserve and must-avoid lists plus global rules → visualisation choices labelled as
-undocumented.
+LLM → room layout (interiors) or façade left-to-right list (exteriors) → must-preserve and
+must-avoid lists plus global rules → visualisation choices labelled as undocumented.
+
+**Room layouts (stages 2, 4, 6; 20 Oct 2026):** sheet analysis records every room on a floor plan with
+its bbox and, per wall as drawn on the page (top, bottom, left, right, other), the openings and
+fixtures on it in order, each with a position along the wall (left end … right end, corner, island).
+Fixtures are read from symbols. The north arrow is stored per sheet (`north_angle_deg`) for the
+report, sun direction and compass-named elevations only, never as a wall label. Stage 4 copies the
+rooms into `ROOMS` by code; a room drawn differently on two sheets keeps both and is flagged. Stage 6
+finds the room for each interior render, picks the wall the camera faces from the view's `camera`
+rule in `knowledge/view_set.yaml`, and writes the ROOM LAYOUT block in the viewer's frame ("Facing
+you", "Left wall", "Right wall", "Behind you (not in view)"). The scene LLM receives the block as
+text and must not change it. The image model gets the room cropped from the floor plan (bbox plus
+`images.room_crop_margin`) instead of the whole plan and the site plan. No usable layout or an
+invalid bbox → the previous behaviour, with the reason in `prompts/index.json` and the report.
+Size and opening codes (patterns in `view_set.yaml`) are stripped from all text sent to the image
+model; the spec and report keep them.
 
 **Materials (stage 5):** `selections.json` holds one entry per item (façade wall, feature cladding,
 entry door type and material, garage door type and finish, window frames, roof profile and colour)
@@ -177,7 +195,10 @@ show, with options from `knowledge/materials_library.yaml`. Changing a PDF value
 designer override.
 
 **Drawing check (stage 8):** input = render + same reference crops + the opening list for that face
-from the spec. Hard fail: extra or missing window/door/garage door on a visible face, wrong storeys
+from the spec (exteriors) or the ROOM LAYOUT block (interiors). Interiors are checked for
+`opening_walls` and `fixture_positions` instead of roof form and storeys: fail only for an opening or
+fixture on the wrong wall, at the opposite end of the right wall, missing or extra; sizes and small
+shifts along a wall pass; an interior answer without these two checks is "Not checked". Hard fail: extra or missing window/door/garage door on a visible face, wrong storeys
 or roof form, visibly wrong schedule colour. Tolerated: opening sizes, exact proportions,
 landscaping, people, vehicles, sky. Fail → one automatic regeneration with fix instructions; a
 second fail goes to review marked "Failed drawing check". Error or unsure → "Not checked".
@@ -186,6 +207,13 @@ The judge looks at the image itself and gives each check a `confidence` plus an 
 `drawing_check.min_confidence` (0.85) becomes "Not checked" with the reason, and the review card
 shows "N% match". The confidence is self-reported by the model, not calibrated; tune the floor
 against the fixture answer keys in M5.5.
+
+**Approval delivers the approved image (stages 7 and 9; decision 20 Oct 2026):** every render is made
+at `images.openai.draft` (size and quality) and reviewed with the DRAFT overlay. Approving a render makes
+no further image call: its clean copy (the same image without the overlay) is centre-cropped to 16:9 and
+scaled locally with Lanczos to `images.delivery_size`, then exported. Tokens reported by every image and
+LLM call are saved (`budget.json`, `usage.json`); report.html and manifest.json show tokens and the cost
+estimated from `pricing` per render, per LLM stage, and in total.
 
 **Designer review (stage 9):** thumbnails grouped by dwelling beside their reference crop and check
 result; Approve / Flag + category + correction; "Regenerate flagged" re-runs stages 6 to 8 for flagged IDs only;
@@ -226,8 +254,10 @@ Desktop\RenderAgent\                 designer folders, created on first launch
   Input\          a PDF; a PDF + same-name .txt; or a sub-folder of PDFs + instructions.txt / selections.yaml
   History\<YYYY-MM-DD HHMM> - <input name>\   originals moved here on Start + started.txt
   Output\<input name>\
-                  Draft\       every render version with the DRAFT overlay (_v1, _v2 …, never overwritten)
-                  Final\       approved clean images only, in Common\ and Dwelling N\ (output/folders.py)
+                  Common\ and Dwelling N\   (output/folders.py; decision 20 Oct 2026)
+                    Draft\             every render version with the DRAFT overlay (_v1, _v2 …, never overwritten)
+                      draft-final\     the approved version, still with the overlay
+                    FINAL APPROVED\    the approved version without the overlay, at images.delivery_size
                   report.html  links back to the matching History folder
 ```
 
@@ -305,6 +335,10 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | Extraction | Refusal or truncation | Stage fails with the reason; no retry loop |
 | Extraction | Drawings contradict | Both values kept and flagged at the gate |
 | Extraction | Invalid/empty bbox | Full sheet image used for that view; noted |
+| Extraction | Room layouts from the sheets do not fit `schemas/house_spec.json` ROOMS | Stage 4 stops with SCHEMA_INVALID and error.json (delete `sheets/` and resume) |
+| Prompts | Interior render with no matching room, no openings or fixtures read, or no wall to face | Previous behaviour (whole floor plan, no ROOM LAYOUT block); reason in `prompts/index.json` and the report |
+| Prompts | Room bbox invalid | Whole floor plan used instead of the room crop; noted in `prompts/index.json` |
+| Drawing check | Interior answer without `opening_walls` and `fixture_positions` | "Not checked", with the reason |
 | Planning | > 16 renders for a dwelling, or counts wrong | Validator corrects by priority; each correction logged |
 | Planning | Required front view missing | Validator inserts it as NOT READY with a blocker |
 | Rendering | Rate limit, timeout, 5xx, network | Backoff, 5 attempts; then that render fails, others continue |
@@ -338,7 +372,7 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 Config (`config.yaml` in the working root; keys in Windows Credential Manager): LLM provider/model
 per stage; image provider/model; `images.enabled_providers` (first release: `openai` only; `muapi`
 stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, checked by
-`budget.py`); image size and quality (HD minimum, refused at load otherwise: size at least 1280×720 in either orientation, no `auto`, quality `high`; default 1536×1024); `images.final_long_edge` (1920, at least 1280: approved images in Final are upscaled locally, Lanczos, never shrunk, to this long edge; job and Draft copies keep the model's size); references per render (3); planned renders per dwelling
+`budget.py`); render image settings `images.openai.draft` (size, default 1536×864; quality `low | medium | high`, default `medium`; older files with `size`/`quality` set directly still load, and a `final` block is ignored; decision 20 Oct 2026); `pricing` (USD per 1M tokens per model id, for the token and cost report; empty = "price not set"); `images.delivery_size` (1920×1080: approved landscape renders are centre-cropped to that aspect and scaled locally with Lanczos to exactly this size, lossless sRGB PNG, no AI upscaler; drafts and job copies keep the generated size; portrait finals are delivered as generated in phase 1); `images.room_crop_margin` (0.04 of the page around a room's bbox in interior reference crops); `images.final_long_edge` is deprecated and ignored; references per render (3); planned renders per dwelling
 (≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`); render concurrency (2); approval gate
 (on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
 
@@ -425,7 +459,7 @@ symbols (window V lines, door swing lines) never drawn; no party-wall detail req
 | 2 | UI | Desktop app: FastAPI + uvicorn on 127.0.0.1, free port at start-up, native pywebview (Edge WebView2) window; static HTML/CSS/JS, no Node build, no CDN. Browser mode later |
 | 3 | App and pipeline | FastAPI calls runner, gate, s9_review and output directly, never the CLI; background worker, one job rendering at a time, others queued; `state.json` is the single source of truth; UI polls or uses SSE; replaces `review/server.py` for designers with the same safety rules (localhost, per-session token on state-changing requests, files only from the job's folders); CLI stays for developers |
 | 4 | Paths | Program in `C:\Program Files\RenderAgent` (read-only: code, knowledge, prompts, schemas); working files in `%LOCALAPPDATA%\RenderAgent`; `config.py` resolves install and working roots separately; dev mode keeps the repo layout; no hard-coded drive letters or user names |
-| 5 | Designer folders | `Desktop\RenderAgent\Input`, `Output`, `History` (known-folder API); Start copies, verifies by sha256, moves originals to dated History with `started.txt`; Output has Draft, Final, report.html; Retry button resumes; OneDrive warning; atomic writes (§8) |
+| 5 | Designer folders | `Desktop\RenderAgent\Input`, `Output`, `History` (known-folder API); Start copies, verifies by sha256, moves originals to dated History with `started.txt`; Output has Common / Dwelling N with Draft, Draft/draft-final and FINAL APPROVED, and report.html; Retry button resumes; OneDrive warning; atomic writes (§8) |
 | 6 | API keys | Entered on the installer page and validated with a no-cost call; also checked at first run; organisation or individual keys; Windows Credential Manager via `keyring`; `.env` developer fallback; no job without a valid key per enabled provider; Settings replaces and re-tests; never in logs, UI responses or job files |
 | 7 | Bundled rules | Private `knowledge/` and `prompts/` bundled for in-house use; risk: extractable from the install; external distribution needs a different design |
 | 8 | Packaging | PyInstaller one-folder → Inno Setup → one `Setup.exe` on a USB pen drive; shortcuts, icon, uninstaller, upgrade over the top keeps config, keys, jobs and Desktop folders; WebView2 check/install; unsigned for now, code signing Phase 2 |

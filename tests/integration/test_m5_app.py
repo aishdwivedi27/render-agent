@@ -162,11 +162,14 @@ def test_exit_gate_fixture_01_end_to_end(env):
     env.provider.calls.clear()
     env.post(f"/api/jobs/{job_id}/review/continue")
     env.drain()
-    assert [c.render_id for c in env.provider.calls] == [target]  # one flag, one image call
-    prompt = env.provider.calls[0].prompt
+    drafts = [c for c in env.provider.calls if c.quality != "high"]
+    assert [c.render_id for c in drafts] == [target]  # one flag, one draft image call
+    prompt = drafts[0].prompt
     assert "Extra window or door: remove the garage window" in prompt
     after = _tree(job_dir)
-    assert {k for k in before if after.get(k) != before[k]} == set()  # every existing file identical
+    changed = {k for k in before if after.get(k) != before[k]}
+    # every existing file identical, except clean copies removed once their render was delivered
+    assert {k for k in changed if not (k.startswith("output/clean/") and k not in after)} == set()
     out_after = _tree(env.folders.root / "Output")
     assert {k for k in out_before if out_after.get(k) != out_before[k]} == set()
 
@@ -177,9 +180,11 @@ def test_exit_gate_fixture_01_end_to_end(env):
     job = env.client.get(f"/api/jobs/{job_id}").json()
     assert job["status"] == "SUCCEEDED" and job["status_text"] == "Finished" and job["screen"] == "results"
     out = Path(job["output_folder"])
-    assert len(list((out / "Draft").glob("*_v*.png"))) == len(cards) + 1
-    assert list((out / "Final").rglob("*.png")) and (out / "report.html").is_file()
-    assert "Draft/" in (out / "report.html").read_text(encoding="utf-8")
+    drafts = [p for p in out.rglob("*_v*.png") if p.parent.name == "Draft"]
+    assert len(drafts) == len(cards) + 1
+    assert list(out.rglob("FINAL APPROVED/*.png")) and list(out.rglob("draft-final/*.png"))
+    assert not list(out.rglob("clean")) and (out / "report.html").is_file()
+    assert "/Draft/" in (out / "report.html").read_text(encoding="utf-8")
     assert env.post(f"/api/jobs/{job_id}/open-folder", {"which": "output"}).status_code == 200
     assert env.opened == [out]
 
@@ -465,7 +470,7 @@ def test_output_not_writable_keeps_job_state(env):
     env.post(f"/api/jobs/{job_id}/retry")
     env.drain()
     job = env.client.get(f"/api/jobs/{job_id}").json()
-    assert job["publish_problem"] is None and (out / "Draft").is_dir()
+    assert job["publish_problem"] is None and list(out.rglob("Draft"))
 
 
 def test_history_move_failure_still_starts_and_says_so(env, monkeypatch):

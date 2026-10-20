@@ -34,7 +34,9 @@ SKIP_SECTIONS = {
     "holdout",
     "must_not_appear",
     "expected_contradictions",
+    "room_layouts",  # graded by grade_rooms
 }
+POSITIONS = ["left_end", "left_of_centre", "centre", "right_of_centre", "right_end"]
 MANUAL_KEYS = {"relationships"}
 NEAR_RATIO = 0.75
 
@@ -129,6 +131,7 @@ class Report:
     items: list[Item] = field(default_factory=list)
     forbidden: list[Item] = field(default_factory=list)
     contradictions: list[Item] = field(default_factory=list)
+    rooms: list[Item] = field(default_factory=list)
 
     def count(self, status: str) -> int:
         return sum(1 for i in self.items if i.status == status)
@@ -150,12 +153,17 @@ class Report:
             f"{sum(i.status == 'in_pdf' for i in self.forbidden)} printed on the drawings (key problem)",
             f"- expected contradictions flagged: "
             f"{sum(i.status == 'flagged' for i in self.contradictions)}/{len(self.contradictions)}",
+            f"- room layout items: {sum(i.status == 'right_wall' for i in self.rooms)}/{len(self.rooms)} "
+            f"on the right wall and place, "
+            f"{sum(i.status == 'wrong_position' for i in self.rooms)} wrong place, "
+            f"{sum(i.status in ('wrong_wall', 'missing') for i in self.rooms)} wrong wall or missing",
             f"- hard failures: {len(self.hard_failures)}",
             "",
         ]
         for title, group in (
             ("Must not appear", self.forbidden),
             ("Expected contradictions", self.contradictions),
+            ("Room layouts (wall + position)", self.rooms),
             ("Needs a verdict", [i for i in self.items if i.status not in ("matched",)]),
         ):
             lines += [f"## {title}", ""]
@@ -235,6 +243,61 @@ def grade(spec: dict[str, Any], key: dict[str, Any], page_texts: dict[int, str] 
     return report
 
 
+def _near(a: str, b: str) -> bool:
+    """Positions within one step; corner matches either end; island only matches island."""
+    if "island" in (a, b) or a == b:
+        return a == b
+    ends = {"left_end", "right_end"}
+    if "corner" in (a, b):
+        return (a if b == "corner" else b) in ends
+    return abs(POSITIONS.index(a) - POSITIONS.index(b)) <= 1
+
+
+def grade_rooms(spec: dict[str, Any], key: dict[str, Any]) -> list[Item]:
+    """Scores each key room item against spec ROOMS: right_wall | wrong_position | wrong_wall | missing.
+    Key dwellings are written D1, D2 ...; a spec dwelling matches when it ends with the same number."""
+    out: list[Item] = []
+    section = key.get("room_layouts") or {}
+    tag = "" if section.get("status") == "verified" else " (key unverified)"
+    for dwelling, views in section.items():
+        if not isinstance(views, dict):
+            continue
+        num = re.sub(r"\D", "", dwelling)
+        for view, want in views.items():
+            room = next(
+                (
+                    r
+                    for r in spec.get("ROOMS", [])
+                    if norm(r["name"]) == norm(want["room"]) and re.sub(r"\D", "", r["dwelling_id"]) == num
+                ),
+                None,
+            )
+            for it in want["items"]:
+                path = f"room_layouts.{dwelling}.{view}.{it['kind']}" + (
+                    f" to {it['leads_to']}" if it.get("leads_to") else ""
+                )
+                expect = f"{it['wall']} wall, {it['position']}"
+                if room is None:
+                    out.append(Item(path, expect, "missing", f"no ROOMS entry {want['room']!r}{tag}"))
+                    continue
+                found = [
+                    (w["side"], i["position"])
+                    for w in room["walls"]
+                    for i in w["items"]
+                    if i["kind"] == it["kind"]
+                    and (not it.get("leads_to") or norm(it["leads_to"]) in norm(i["leads_to"]))
+                ]
+                if not found:
+                    out.append(Item(path, expect, "missing", f"not on any wall{tag}"))
+                elif any(side == it["wall"] and _near(pos, it["position"]) for side, pos in found):
+                    out.append(Item(path, expect, "right_wall", tag.strip()))
+                elif any(side == it["wall"] for side, _ in found):
+                    out.append(Item(path, expect, "wrong_position", f"spec has {found}{tag}"))
+                else:
+                    out.append(Item(path, expect, "wrong_wall", f"spec has {found}{tag}"))
+    return out
+
+
 def grade_job(job_dir: Path, fixture_dir: Path) -> Report:
     spec = json.loads((job_dir / "house_specification.json").read_text(encoding="utf-8"))
     key = yaml.safe_load((fixture_dir / "answer_key.yaml").read_text(encoding="utf-8"))
@@ -242,7 +305,9 @@ def grade_job(job_dir: Path, fixture_dir: Path) -> Report:
         int(p.stem.split("-")[1]): p.read_text(encoding="utf-8")
         for p in (job_dir / "pages").glob("page-*.txt")
     }
-    return grade(spec, key, texts)
+    report = grade(spec, key, texts)
+    report.rooms = grade_rooms(spec, key)
+    return report
 
 
 def main(argv: list[str]) -> int:

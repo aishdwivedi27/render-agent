@@ -28,7 +28,9 @@ def get_provider(settings: Settings, name: str | None = None, dry_run: bool = Fa
         key = settings.secret("OPENAI_API_KEY")
         if not key:
             raise key_missing("OPENAI_API_KEY")
-        return OpenAIImagesProvider(key, cfg.openai.model, cfg.openai.quality, settings.llm.timeout_seconds)
+        return OpenAIImagesProvider(
+            key, cfg.openai.model, cfg.openai.draft.quality, settings.llm.timeout_seconds
+        )
     from render_agent.images.muapi_cli import MuapiProvider
 
     key = settings.secret("MUAPI_API_KEY")

@@ -114,7 +114,7 @@ def _no_defaults(settings, keys=("entry_door_type", "entry_door_material")):
     p.write_text("\n".join(out) + "\n", encoding="utf-8")
 
 
-def _start(settings, instructions=""):
+def _start(settings, instructions="", llm=None):
     pdf = make_pdf(settings.root / "drop" / "set" / "a.pdf", ["ELEVATIONS", "FLOOR PLAN"])
     inputs = [pdf]
     if instructions:
@@ -122,7 +122,7 @@ def _start(settings, instructions=""):
         txt.write_text(instructions, encoding="utf-8")
         inputs.append(txt)
     job = new_job(settings.path("jobs"), inputs)
-    llm = _llm()
+    llm = llm or _llm()
     return job, llm, run_job(RunContext(job, settings, extras={"llm": llm}))
 
 
@@ -403,3 +403,52 @@ def test_selections_yaml_presets_choices(install_settings):
     )
     ignored = json.loads((job.dir / "approval.json").read_text())["ignored_directives"]
     assert any("window_frames" in i for i in ignored)
+
+
+def test_stage6_crops_the_room_and_writes_its_layout(install_settings):
+    from tests.unit.test_room_layout import _item, _wall
+
+    walls = [
+        _wall("top", _item("cooktop", "centre"), _item("sink", "right_end")),
+        _wall("left", _item("opening", "right_end", "MEALS", "2100 x 900")),
+        _wall("right"),
+        _wall("bottom", _item("island", "island")),
+    ]
+    rooms = [
+        {"name": "KITCHEN", "dwelling": d, "view_id": "FP", "walls": walls,
+         "bbox": {"x0": 0.3, "y0": 0.3, "x1": 0.5, "y1": 0.5}}
+        for d in (D1, D2, D3)
+    ]  # fmt: skip
+    llm = _llm()
+    llm.canned["sheet_analysis.page-2"]["rooms"] = rooms
+    job, _, _ = _start(install_settings, "@select entry_door=pivot, timber", llm)
+    need = [n["key"] for n in json.loads((job.dir / "approval.json").read_text())["needs_choice"]]
+    assert gate.approve(job, {k: "X" for k in need}, by="test") == []
+    run_job(RunContext(load_job(job.dir), install_settings, extras={"llm": llm}))
+    spec = json.loads((job.dir / "house_specification.json").read_text(encoding="utf-8"))
+    assert [r["name"] for r in spec["ROOMS"]] == ["KITCHEN"] * 3
+    index = json.loads((job.dir / "prompts" / "index.json").read_text(encoding="utf-8"))["renders"]
+    kit = next(r for r in index if r["render_id"] == "P1-SHARED-KIT")
+    assert kit["interior"] and kit["layout_source"] == "room", kit["layout_note"]
+    crop = Image.open(job.dir / kit["references"][0])
+    assert crop.width < Image.open(job.dir / "pages" / "page-2.png").width * 0.4
+    text = (job.dir / kit["prompt_file"]).read_text(encoding="utf-8")
+    assert "Facing you: cooktop at the centre; sink at the right end." in text and "2100" not in text
+    scene_prompt = next(c for c in llm.calls if c["stage"] == "render_prompts")["prompt"]
+    assert "Facing you: cooktop" in scene_prompt
+
+
+def test_room_layout_that_breaks_the_schema_stops_stage4(install_settings):
+    llm = _llm()
+    bad = {
+        "name": "KITCHEN",
+        "dwelling": D1,
+        "view_id": "FP",
+        "bbox": {"x0": 0.3, "y0": 0.3, "x1": 0.5, "y1": 0.5},
+    }
+    llm.canned["sheet_analysis.page-2"]["rooms"] = [
+        {**bad, "walls": [{"side": "up", "description": "", "items": []}]}
+    ]
+    job, _, res = _start(install_settings, llm=llm)
+    assert res.stopped_at == "s4_spec" and "SCHEMA_INVALID" in json.dumps(load_job(job.dir).state["errors"])
+    assert (job.dir / "error.json").is_file()

@@ -20,7 +20,15 @@ from typing import Annotated, Any, Literal
 
 import yaml
 from dotenv import dotenv_values
-from pydantic import AfterValidator, BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
+from pydantic import (
+    AfterValidator,
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    ValidationError,
+    model_validator,
+)
 
 from render_agent.errors import PermanentError
 
@@ -78,21 +86,38 @@ class LLM(_Strict):
 
 
 HD_MIN_LONG_EDGE = 1280  # 720p class: the smallest render the agent accepts
-HD_MIN_SHORT_EDGE = 720
+
+
+class RenderImage(_Strict):
+    """Size and quality of every render. The approved render itself is delivered (clean copy scaled to
+    images.delivery_size), so there is no second, final image call (decision 20 Oct 2026)."""
+
+    size: str = Field(default="1536x864", pattern=r"^\d+x\d+$")
+    quality: Literal["low", "medium", "high"] = "medium"
 
 
 class OpenAIImages(_Strict):
     model: ModelId
-    size: str = Field(pattern=r"^\d+x\d+$")
-    quality: Literal["high"]  # renders are always HD; lower qualities are refused at load
+    draft: RenderImage = Field(default_factory=RenderImage)
 
-    @field_validator("size")
+    @model_validator(mode="before")
     @classmethod
-    def _hd_size(cls, v: str) -> str:
-        w, h = sorted(int(x) for x in v.split("x"))
-        if h < HD_MIN_LONG_EDGE or w < HD_MIN_SHORT_EDGE:
-            raise ValueError(f"size {v} is below HD ({HD_MIN_LONG_EDGE}x{HD_MIN_SHORT_EDGE} minimum)")
-        return v
+    def _legacy(cls, data: Any) -> Any:
+        """Older files: size/quality set directly are the render settings; a `final` block is ignored."""
+        if isinstance(data, dict):
+            data = dict(data)
+            data.pop("final", None)
+            if "draft" not in data and ("size" in data or "quality" in data):
+                data["draft"] = {k: data.pop(k) for k in ("size", "quality") if k in data}
+        return data
+
+
+class Price(_Strict):
+    """USD per 1 million tokens; None = not set (tokens are still shown)."""
+
+    input: float | None = Field(default=None, ge=0)
+    output: float | None = Field(default=None, ge=0)
+    image_input: float | None = Field(default=None, ge=0)
 
 
 class MuapiImages(_Strict):
@@ -107,7 +132,10 @@ class Images(_Strict):
     openai: OpenAIImages
     muapi: MuapiImages
     references_per_render: int = Field(ge=0)
-    final_long_edge: int = Field(default=1920, ge=HD_MIN_LONG_EDGE)  # Final images are resized up to this
+    # Approved landscape renders are delivered at exactly this size (crop to the aspect, Lanczos).
+    delivery_size: str = Field(default="1920x1080", pattern=r"^\d+x\d+$")
+    final_long_edge: int | None = Field(default=None, ge=HD_MIN_LONG_EDGE)  # deprecated: delivery_size
+    room_crop_margin: float = Field(default=0.04, ge=0, le=0.5)  # page fraction around a room's bbox
     concurrency: int = Field(ge=1)
     retries: int = Field(ge=0)
     max_images_per_round: int | None = Field(default=None, ge=1)  # M5.5 cap on paid calls per job run
@@ -175,6 +203,7 @@ class Settings(_Strict):
     review: Review
     notify: Notify
     designer: Designer = Field(default_factory=Designer)
+    pricing: dict[str, Price] = Field(default_factory=dict)  # model id -> prices, for the cost report
 
     root: Path = Field(exclude=True)
     work_root: Path = Field(exclude=True)

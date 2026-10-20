@@ -4,6 +4,7 @@ provider.render, and every call (paid or not) is recorded in jobs/<id>/budget.js
 Allowance per dwelling = planned renders for that dwelling (capped by
 planning.max_planned_renders_per_dwelling) x (1 + planning.auto_retries_after_failed_check).
 Designer-requested regenerations (kind "review") are counted and costed separately, not refused.
+Tokens the provider reports are added to each call (`usage`) for the cost report.
 An optional round cap (images.max_images_per_round, M5.5) limits paid calls of every kind in the job.
 """
 
@@ -21,6 +22,7 @@ from render_agent.util.fs import atomic_write_json
 
 FILE = "budget.json"
 KINDS = {"first", "auto_retry", "review"}
+OUTSIDE_ALLOWANCE = {"review", "final"}  # "final": calls recorded by jobs run before 20 Oct 2026 evening
 
 
 def allowances(planned: dict[str, int], max_per_dwelling: int, auto_retries: int) -> dict[str, int]:
@@ -43,14 +45,19 @@ class Budget:
         return sum(
             1
             for c in self.data["calls"]
-            if c["dwelling_id"] == dwelling and c["kind"] != "review" and (c["paid"] or not paid_only)
+            if c["dwelling_id"] == dwelling
+            and c["kind"] not in OUTSIDE_ALLOWANCE
+            and (c["paid"] or not paid_only)
         )
 
     def paid_total(self) -> int:
         return sum(1 for c in self.data["calls"] if c["paid"])
 
-    def reserve(self, render_id: str, dwelling: str, kind: str, provider: str, paid: bool) -> None:
-        """Records the call, or raises PauseJobError(BUDGET_EXHAUSTED) before a paid call over budget."""
+    def reserve(
+        self, render_id: str, dwelling: str, kind: str, provider: str, paid: bool, quality: str = ""
+    ) -> int:
+        """Records the call and returns its index, or raises PauseJobError(BUDGET_EXHAUSTED) before a
+        paid call over budget."""
         if kind not in KINDS:
             raise ValueError(f"unknown budget kind {kind}")
         with self._lock:
@@ -67,7 +74,7 @@ class Budget:
                     ),
                 )
             limit = self.data["allowance"].get(dwelling, 0)
-            if paid and kind != "review" and self.used(dwelling) >= limit:
+            if paid and kind not in OUTSIDE_ALLOWANCE and self.used(dwelling) >= limit:
                 raise PauseJobError(
                     code="BUDGET_EXHAUSTED",
                     what_happened=(
@@ -83,9 +90,22 @@ class Budget:
                     "kind": kind,
                     "provider": provider,
                     "paid": paid,
+                    "quality": quality,
                     "time": datetime.now(UTC).isoformat(timespec="seconds"),
                 }
             )
+            self._save()
+            return len(self.data["calls"]) - 1
+
+    def add_usage(self, index: int, usage: dict[str, int]) -> None:
+        """Adds the tokens a provider reported to call `index` (all attempts of that call)."""
+        if not usage:
+            return
+        with self._lock:
+            call = self.data["calls"][index]
+            total = call.setdefault("usage", {})
+            for k, v in usage.items():
+                total[k] = total.get(k, 0) + v
             self._save()
 
     def summary(self) -> dict[str, Any]:

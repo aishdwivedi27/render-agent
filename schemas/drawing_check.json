@@ -19,6 +19,8 @@
               "storeys",
               "colour_schedule",
               "dwelling_identity",
+              "opening_walls",
+              "fixture_positions",
               "other"
             ]
           },

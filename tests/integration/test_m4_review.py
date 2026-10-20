@@ -47,7 +47,7 @@ def test_flag_one_regenerates_only_that_render(install_settings):
     before = _snapshot(job.dir)
     provider = MockProvider()
     res = _go(install_settings, job, provider=provider)
-    assert [c.render_id for c in provider.calls] == [target]  # exactly one image call
+    assert [c.render_id for c in provider.calls] == [target]  # exactly one image call; approval makes none
     assert "DESIGNER_NOTE" in provider.calls[0].prompt and "darker stone" in provider.calls[0].prompt
     after = _snapshot(job.dir)
     changed = {k for k in after if before.get(k) != after[k]}
@@ -56,7 +56,8 @@ def test_flag_one_regenerates_only_that_render(install_settings):
     assert all(
         target in k or k.startswith("output/Dwelling") or k.startswith("output/Common") for k in new_files
     )
-    assert f"output/{target}_v2.png" in new_files and f"output/clean/{target}_v2.png" in new_files
+    assert any(k.endswith(f"/Draft/{target}_v2.png") for k in new_files)
+    assert f"output/clean/{target}_v2.png" in new_files
 
     review = s9_review.load_review(job.dir)
     assert review["renders"][target]["status"] == "pending" and review["renders"][target]["version"] == 2
@@ -85,6 +86,7 @@ def test_flag_one_regenerates_only_that_render(install_settings):
     assert len(manifest["renders"]) == 14 and manifest["pending"] == []
     kit = next(e for e in manifest["renders"] if e["render_id"] == target)
     assert kit["version"] == 2 and kit["source"] == f"output/clean/{target}_v2.png"
+    assert "Tokens and cost" in (job.dir / "report.html").read_text(encoding="utf-8")
     assert "knowledge_files" in manifest and "view_set.yaml" in manifest["knowledge_files"]
     report = (job.dir / "report.html").read_text(encoding="utf-8")
     assert "conceptual visualisations" in report and target in report
@@ -105,5 +107,26 @@ def test_review_cli(install, monkeypatch, capsys):
     assert state["dry_run"] is False
     # approving everything finishes the job (no image calls needed)
     monkeypatch.setattr("render_agent.pipeline.stages.s7_render.get_provider", lambda *a, **k: MockProvider())
+    monkeypatch.setattr("render_agent.pipeline.stages.s8_check.llm_for", lambda *a, **k: CheckLLM())
     assert main(["review", str(job.dir), "--approve", "all"]) == 0
     assert "SUCCEEDED" in capsys.readouterr().out
+
+
+def test_renders_use_draft_settings_and_approval_delivers_that_image(install_settings):
+    from PIL import Image
+
+    job = _approved(install_settings)
+    provider = MockProvider()
+    _go(install_settings, job, provider=provider)
+    draft = install_settings.images.openai.draft
+    assert {c.quality for c in provider.calls} == {draft.quality}
+    assert {c.size for c in provider.calls} <= {draft.size, "x".join(reversed(draft.size.split("x")))}
+    (job.dir / "review.txt").write_text("approve all\n", encoding="utf-8")
+    after = MockProvider()
+    res = _go(install_settings, job, provider=after)
+    assert after.calls == [] and res.status == "SUCCEEDED", res.message  # approval makes no image call
+    manifest = json.loads((job.dir / "manifest.json").read_text())
+    for e in manifest["renders"]:
+        assert e["source"].startswith("output/clean/")
+        out = Image.open(job.dir / e["copies"][0])
+        assert out.size == tuple(int(x) for x in install_settings.images.delivery_size.split("x"))

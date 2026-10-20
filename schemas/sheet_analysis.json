@@ -195,6 +195,142 @@
       "items": {
         "type": "string"
       }
+    },
+    "north_angle_deg": {
+      "type": "string"
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "view_id": {
+            "type": "string"
+          },
+          "bbox": {
+            "type": "object",
+            "properties": {
+              "x0": {
+                "type": "number"
+              },
+              "y0": {
+                "type": "number"
+              },
+              "x1": {
+                "type": "number"
+              },
+              "y1": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x0",
+              "y0",
+              "x1",
+              "y1"
+            ],
+            "additionalProperties": false
+          },
+          "walls": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "side": {
+                  "type": "string",
+                  "enum": [
+                    "top",
+                    "bottom",
+                    "left",
+                    "right",
+                    "other"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "items": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "window",
+                          "door",
+                          "opening",
+                          "garage_door",
+                          "cooktop",
+                          "sink",
+                          "island",
+                          "fridge",
+                          "basin",
+                          "wc",
+                          "shower",
+                          "bath",
+                          "robe",
+                          "washing_machine",
+                          "other"
+                        ]
+                      },
+                      "label": {
+                        "type": "string"
+                      },
+                      "leads_to": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "string",
+                        "enum": [
+                          "left_end",
+                          "left_of_centre",
+                          "centre",
+                          "right_of_centre",
+                          "right_end",
+                          "corner",
+                          "island"
+                        ]
+                      },
+                      "beside": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "label",
+                      "leads_to",
+                      "position",
+                      "beside"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "required": [
+                "side",
+                "description",
+                "items"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "dwelling",
+          "view_id",
+          "bbox",
+          "walls"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [
@@ -205,7 +341,9 @@
     "dwellings_referenced",
     "views",
     "findings",
-    "uncertainties"
+    "uncertainties",
+    "north_angle_deg",
+    "rooms"
   ],
   "additionalProperties": false
 }

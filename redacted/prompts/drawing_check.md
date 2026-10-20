@@ -5,7 +5,13 @@
 
 [redacted]
 
+## THIS VIEW
+
+{{VIEW_KIND_NOTE}}
+
 ## WHAT FAILS (hard fail)
+
+{{CHECK_LIST}}
 
 [redacted]
 
@@ -33,9 +39,9 @@
 
 {{FACTS}}
 
-## FAÇADE OF THIS DWELLING, LEFT TO RIGHT
+## FAÇADE LEFT TO RIGHT (exteriors) OR ROOM LAYOUT (interiors)
 
-{{FACADE}}
+{{LAYOUT}}
 
 ## OPENINGS DOCUMENTED ON THE ELEVATIONS IN VIEW
 

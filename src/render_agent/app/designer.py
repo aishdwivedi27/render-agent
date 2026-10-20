@@ -317,22 +317,26 @@ def _copy_if_changed(src: Path, dest: Path) -> None:
 
 
 def publish(job: Job) -> str | None:
-    """Copies Draft (every version with the DRAFT overlay), Final (approved, clean, by dwelling)
-    and report.html to the job's Output folder. Returns a plain problem, or None."""
+    """Copies the job's output folders to its Output folder, same layout (decision 20 Oct 2026):
+    <Dwelling N | Common>/Draft (every version, DRAFT overlay), Draft/draft-final (approved version,
+    overlay) and FINAL APPROVED (approved, no overlay), plus report.html. The job's hidden clean
+    copies are never copied. Returns a plain problem, or None."""
     info = job.state.get("designer") or {}
     if not info.get("output"):
         return None  # a CLI job: no designer folders
     out = Path(info["output"])
     src = job.dir / "output"
     try:
-        for png in sorted(src.glob("*_v*.png")):
-            _copy_if_changed(png, out / "Draft" / png.name)
-        for sub in sorted(p for p in src.iterdir() if p.is_dir() and p.name != "clean"):
-            for png in sorted(sub.glob("*.png")):
-                _copy_if_changed(png, out / "Final" / sub.name / png.name)
+        for png in sorted(src.rglob("*.png")):
+            rel = png.relative_to(src)
+            if rel.parts[0] == "clean":
+                continue
+            if len(rel.parts) == 1:  # drafts of jobs made before 20 Oct 2026 lived in output/ itself
+                rel = Path("Draft") / rel
+            _copy_if_changed(png, out / rel)
         report = job.dir / "report.html"
-        if report.is_file():  # its thumbnails point at the job's output/; here they live in Draft/
-            text = report.read_text(encoding="utf-8").replace('"output/', '"Draft/')
+        if report.is_file():  # its thumbnails point at the job's output/; here that folder is the root
+            text = report.read_text(encoding="utf-8").replace('"output/', '"')
             if not (out / "report.html").is_file() or (out / "report.html").read_text("utf-8") != text:
                 atomic_write_text(out / "report.html", text)
     except OSError as exc:

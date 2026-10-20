@@ -46,6 +46,11 @@ def normalise_bboxes(sheet: dict[str, Any]) -> list[str]:
             notes.append(f"{view['view_id']}: invalid or empty bbox {b}; full sheet image used instead")
             clamped = dict(FULL_SHEET)
         view["bbox"] = clamped
+    for room in sheet.get("rooms", []):  # an invalid room bbox is kept: s6 falls back to the whole plan
+        b = room["bbox"]
+        room["bbox"] = {k: min(1.0, max(0.0, float(b[k]))) for k in ("x0", "y0", "x1", "y1")}
+        if room["bbox"] != {k: float(b[k]) for k in room["bbox"]}:
+            notes.append(f"room {room['name']}: bbox clamped to the page")
     return notes
 
 

@@ -1,5 +1,5 @@
 """DRAFT overlay, applied to every render version until the designer approves it at review.
-The clean copy lives only in output/clean/."""
+The overlay-free copy lives only in output/clean/, for the latest version of each render, until delivered."""
 
 from __future__ import annotations
 

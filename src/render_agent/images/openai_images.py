@@ -31,7 +31,8 @@ class OpenAIImagesProvider:
     def render(self, req: RenderRequest) -> bytes:
         import openai
 
-        args = {"model": self.model, "prompt": req.prompt, "size": req.size, "quality": self.quality, "n": 1}
+        quality = req.quality or self.quality
+        args = {"model": self.model, "prompt": req.prompt, "size": req.size, "quality": quality, "n": 1}
         try:
             with ExitStack() as stack:
                 if req.references:
@@ -41,9 +42,24 @@ class OpenAIImagesProvider:
                     resp = self.client.images.generate(**args)
         except openai.OpenAIError as exc:
             raise map_image_error(exc, openai) from exc
+        req.usage.update(usage_of(resp))
         data = getattr(resp, "data", None) or []
         b64 = getattr(data[0], "b64_json", None) if data else None
         return base64.b64decode(b64) if b64 else b""
+
+
+def usage_of(resp: Any) -> dict[str, int]:
+    """input, output and image-input tokens from an Images API response ({} when not reported)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return {}
+    details = getattr(u, "input_tokens_details", None)
+    out = {
+        "input_tokens": int(getattr(u, "input_tokens", 0) or 0),
+        "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
+        "image_input_tokens": int(getattr(details, "image_tokens", 0) or 0) if details is not None else 0,
+    }
+    return {k: v for k, v in out.items() if v}
 
 
 def map_image_error(exc: Exception, sdk: Any) -> Exception:

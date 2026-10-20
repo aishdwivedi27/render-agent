@@ -13,8 +13,10 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
@@ -35,6 +37,8 @@ if TYPE_CHECKING:
     from render_agent.config import Settings
 
 log = logging.getLogger("render_agent.llm")
+USAGE_FILE = "usage.json"  # in the job folder: tokens of every LLM call, for the cost report
+_usage_lock = threading.Lock()
 
 
 class LLM(Protocol):
@@ -51,6 +55,7 @@ class SendResult:
     text: str = ""
     data: dict[str, Any] | None = None
     detail: str = ""
+    usage: dict[str, int] = field(default_factory=dict)  # tokens the provider reported for this call
 
 
 class BaseLLM:
@@ -114,7 +119,9 @@ class BaseLLM:
                     "seconds": round(time.monotonic() - started, 1),
                     "stop": result.stop,
                     "output": result.data if result.data is not None else result.text,
+                    "usage": result.usage,
                 }
+                self._record_usage(stage, kind, result.usage)
                 record["attempts"].append(entry)
                 if result.stop != "complete":
                     raise _stop_error(stage, result)
@@ -133,6 +140,23 @@ class BaseLLM:
             )
         finally:
             self._save_raw(stage, record)
+
+    def _record_usage(self, stage: str, kind: str, usage: dict[str, int]) -> None:
+        """Appends one call to <job>/usage.json (raw_dir is <job>/llm); nothing outside a job."""
+        if self.raw_dir is None or not usage:
+            return
+        path = self.raw_dir.parent / USAGE_FILE
+        row = {
+            "stage": stage,
+            "kind": kind,
+            "provider": self.provider,
+            "model": self.model,
+            "usage": usage,
+            "time": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        with _usage_lock:
+            calls = json.loads(path.read_text(encoding="utf-8"))["calls"] if path.is_file() else []
+            atomic_write_json(path, {"calls": [*calls, row]})
 
     def _save_raw(self, stage: str, record: dict[str, Any]) -> None:
         if self.raw_dir is not None:

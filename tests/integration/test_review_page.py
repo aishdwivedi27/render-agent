@@ -67,7 +67,7 @@ def test_page_lists_renders_and_records_decisions(page):
     status, body = _get(base + "/")
     text = body.decode()
     assert status == 200 and "P1-SHARED-KIT" in text and "DWELLING 2" in text
-    img = re.search(r"src='(/file/output/P1-SHARED-KIT_v1\.png)'", text).group(1)
+    img = re.search(r"src='(/file/output/[^']*/Draft/P1-SHARED-KIT_v1\.png)'", text).group(1)
     assert _get(base + img)[1].startswith(b"\x89PNG")
     assert "/file/references/" in text  # reference crop beside the render
 

@@ -46,7 +46,23 @@ class AnthropicLLM(BaseLLM):
             resp = self.client.messages.create(**self._request(prompt, images, schema, schema_name))
         except anthropic.AnthropicError as exc:
             raise map_vendor_error(exc, anthropic, "Anthropic") from exc
-        return parse_response(resp, schema_name)
+        result = parse_response(resp, schema_name)
+        result.usage = usage_of(resp)
+        return result
+
+
+def usage_of(resp: Any) -> dict[str, int]:
+    """Input and output tokens of a Messages API answer ({} when not reported)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return {}
+    out = {
+        "input_tokens": int(getattr(u, "input_tokens", 0) or 0)
+        + int(getattr(u, "cache_read_input_tokens", 0) or 0)
+        + int(getattr(u, "cache_creation_input_tokens", 0) or 0),
+        "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
+    }
+    return {k: v for k, v in out.items() if v}
 
 
 def parse_response(resp: Any, schema_name: str) -> SendResult:

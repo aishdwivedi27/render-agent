@@ -12,6 +12,9 @@
 ## Callouts and leader lines (decision 14 Oct 2026)
 [redacted]
 
+## Room layouts: which wall, where along it
+[redacted]
+
 ## Reading a façade left to right
 [redacted]
 

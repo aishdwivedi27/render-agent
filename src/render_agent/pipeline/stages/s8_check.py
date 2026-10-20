@@ -1,6 +1,9 @@
 """Stage 8: drawing check of every render against its reference crops and the documented openings
 (docs/SPEC.md section 6, schemas/drawing_check.json).
 
+Interior views (prompts/index.json `interior`) are checked for opening_walls and fixture_positions
+against the ROOM LAYOUT block s6 wrote, instead of roof_form and storeys; exteriors are unchanged.
+An answer that leaves out a check the view requires is unsure, never a pass.
 Code, not the model, decides the outcome: any failed check -> fail; any unsure (or no checks) ->
 unsure; a pass whose confidence (the lowest of `image_match` and each check's confidence) is below
 `drawing_check.min_confidence` -> unsure. A fail gets `planning.auto_retries_after_failed_check`
@@ -20,6 +23,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from render_agent.errors import AgentError, PauseJobError
+from render_agent.pipeline import corrections
 from render_agent.pipeline.stages._common import llm_for, load_schema, read_json
 from render_agent.pipeline.stages.s7_render import Renderer, latest
 from render_agent.util.fs import atomic_write_json
@@ -32,6 +36,24 @@ STAGE = "drawing_check"
 ARTIFACT = "checks/index.json"
 PASSED, FAILED, NOT_CHECKED = "Passed drawing check", "Failed drawing check", "Not checked"
 log = logging.getLogger("render_agent.s8")
+EXTERIOR_CHECKS = (
+    "extra_openings",
+    "missing_openings",
+    "opening_positions",
+    "storeys",
+    "roof_form",
+    "colour_schedule",
+    "dwelling_identity",
+)
+INTERIOR_CHECKS = (
+    "extra_openings",
+    "missing_openings",
+    "opening_walls",
+    "fixture_positions",
+    "colour_schedule",
+    "dwelling_identity",
+)
+INTERIOR_REQUIRED = ("opening_walls", "fixture_positions")
 
 
 def confidence(answer: dict[str, Any]) -> float:
@@ -40,14 +62,19 @@ def confidence(answer: dict[str, Any]) -> float:
     return round(float(min(values)), 3)
 
 
-def decide(answer: dict[str, Any], render_id: str, min_confidence: float = 0.0) -> str:
-    """pass | fail | unsure, recomputed from the individual checks and the confidence floor."""
+def decide(
+    answer: dict[str, Any], render_id: str, min_confidence: float = 0.0, required: tuple[str, ...] = ()
+) -> str:
+    """pass | fail | unsure, recomputed from the individual checks and the confidence floor.
+    A missing `required` check makes a would-be pass unsure."""
     results = [c["result"] for c in answer.get("checks", [])]
     if answer.get("render_id") != render_id or not results:
         return "unsure"
     if "fail" in results:
         return "fail"
     if "unsure" in results:
+        return "unsure"
+    if set(required) - {c["check"] for c in answer.get("checks", [])}:
         return "unsure"
     return "pass" if confidence(answer) >= min_confidence else "unsure"
 
@@ -119,6 +146,22 @@ class Checker:
         views = [self.view_label(v) for v in e["reference_view_ids"]]
         legend = [f"- Image {i} is {v['label']}, sheet {v['page']}" for i, v in enumerate(views, 2)]
         facts = [*req.get("architectural_facts", []), *req.get("materials_and_colours", [])]
+        interior = bool(e.get("interior"))
+        if interior:
+            layout = (
+                quote_block("ROOM_LAYOUT", e["room_layout"])
+                if e.get("room_layout")
+                else "No room layout was extracted for this room; judge walls from the floor-plan image."
+            )
+            note = (
+                "This is an INTERIOR view. Roof form and storeys are not checked. Judge which wall each "
+                "window, door, opening and fixture is on and roughly where against the ROOM LAYOUT."
+            )
+            openings = "Interior view: the openings of this room are in the room layout above."
+        else:
+            layout = facade_text(e)
+            note = "This is an EXTERIOR view."
+            openings = openings_for(self.spec, [v["label"] for v in views])
         return render(
             self.template,
             {
@@ -127,13 +170,22 @@ class Checker:
                 "STRICTNESS": self.ctx.settings.drawing_check.strictness,
                 "LEGEND": "\n".join(["- Image 1 is the render.", *legend]),
                 "FACTS": quote_block("FACTS", "\n".join(f"- {f}" for f in facts) or "- (none listed)"),
-                "FACADE": facade_text(e),
-                "OPENINGS": openings_for(self.spec, [v["label"] for v in views]),
+                "VIEW_KIND_NOTE": note,
+                "CHECK_LIST": ", ".join(INTERIOR_CHECKS if interior else EXTERIOR_CHECKS),
+                "LAYOUT": layout + corrections.prompt_block(self.job_dir) + self.notes.get(render_id, ""),
+                "OPENINGS": openings,
                 "IDENTITY": quote_block("IDENTITY", self.identities.get(e["dwelling_id"], "")),
             },
         )
 
+    notes: dict[str, str] = {}  # render_id -> designer review notes of the version being checked
+
     def check_version(self, render_id: str, ver: dict[str, Any]) -> dict[str, Any]:
+        if ver.get("kind") == "review" and ver.get("fix_instructions"):
+            self.notes[render_id] = (
+                "\nDESIGNER CHANGES REQUESTED AT REVIEW (judge the render with these applied)\n"
+                + quote_block("DESIGNER_NOTE", "\n".join(ver["fix_instructions"]))
+            )
         out_file = self.job_dir / "checks" / f"{Path(ver['file']).stem}.json"
         if out_file.is_file():
             return json.loads(out_file.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
@@ -155,13 +207,16 @@ class Checker:
                 result.update(overall="unsure", reason=f"check failed: {err}")
             else:
                 floor = self.ctx.settings.drawing_check.min_confidence
+                required = INTERIOR_REQUIRED if e.get("interior") else ()
                 result.update(
                     answer=answer,
                     confidence=confidence(answer),
-                    overall=decide(answer, render_id, floor),
+                    overall=decide(answer, render_id, floor, required),
                 )
-                if result["overall"] == "unsure" and decide(answer, render_id) == "pass":
+                if result["overall"] == "unsure" and decide(answer, render_id, 0.0, required) == "pass":
                     result["reason"] = f"confidence {result['confidence']:.2f} is below {floor:.2f}"
+                elif result["overall"] == "unsure" and decide(answer, render_id) == "pass":
+                    result["reason"] = f"the answer left out the {' and '.join(required)} checks"
                 if answer.get("overall") != result["overall"]:
                     result["overall_from_model"] = answer.get("overall")
         atomic_write_json(out_file, result)

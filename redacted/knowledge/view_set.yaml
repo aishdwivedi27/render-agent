@@ -34,6 +34,21 @@ subdivisions:
     difference_threshold: <redacted>
   separate:
     treat_as_independent_houses: true
+image_prompt_strip_patterns:
+- <redacted>
+opening_shapes:
+  code_pattern: <redacted>
+  high_set_max_height_mm: <redacted>
+  full_height_min_height_mm: <redacted>
+  wide_ratio: <redacted>
+  tall_ratio: <redacted>
+  type_words:
+    obsc: <redacted>
+    fx: <redacted>
+    awn: <redacted>
+    sl: <redacted>
+image_prompt_drop_lines_with:
+- <redacted>
 no_own_render:
 - <redacted>
 ignore_for_planning:
@@ -43,3 +58,6 @@ output_folders:
   dwelling_folder_pattern: <redacted>
   copy_shared_into_each_dwelling: true
   single_house_has_common_folder: false
+  draft_folder: <redacted>
+  draft_final_folder: <redacted>
+  final_folder: <redacted>

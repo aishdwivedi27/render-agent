@@ -2,8 +2,12 @@
 
 - budget guard before every provider call (images/budget.py)
 - `images.concurrency` renders at a time; one render failing never stops the others
-- versioned outputs: output/<id>_vN.png carries the DRAFT overlay, output/clean/<id>_vN.png is clean;
-  nothing is overwritten
+- renders use images.openai.draft (size and quality); an approved draft is delivered as its clean copy
+  scaled to images.delivery_size, with no further image call (decision 20 Oct 2026)
+- versioned outputs (decision 20 Oct 2026): output/<home>/Draft/<id>_vN.png carries the DRAFT overlay
+  and is kept; output/clean/<id>_vN.png is the overlay-free copy of the LATEST version only (older
+  clean copies are deleted when a newer version is made); drafts are never overwritten
+- tokens the provider reports are saved on each version and in budget.json (cost report)
 - output/render_index.json records every version, failure and skip; resume skips finished renders
 - a PauseJobError (key, quota, budget) pauses the job after the in-flight renders finish
 """
@@ -16,17 +20,20 @@ import threading
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from render_agent.errors import AgentError, PauseJobError
 from render_agent.images import ImageProvider, RenderRequest, get_provider, render_with_retry, size_for
 from render_agent.images.budget import Budget, allowances
 from render_agent.images.overlay import draft_overlay
+from render_agent.output.folders import home_folder, names
 from render_agent.pipeline import corrections
 from render_agent.pipeline.stages._common import ingest_info, read_json
 from render_agent.util.directives import parse_directives
 from render_agent.util.fs import atomic_write_bytes, atomic_write_json, atomic_write_text, safe_name
 from render_agent.util.prompts import quote_block
+from render_agent.validate.checklist_validator import load_view_set
 
 if TYPE_CHECKING:
     from render_agent.pipeline.runner import RunContext
@@ -63,6 +70,25 @@ class Renderer:
             ctx.settings.images.max_images_per_round,
         )
         self.wait = ctx.extras.get("image_wait")
+        self.view_set = load_view_set(ctx.settings.path("knowledge"))
+        checklist = self.job_dir / "checklist.json"
+        self.plan = (
+            {r["render_id"]: r for r in read_json(checklist, STAGE)["RENDER_REQUIREMENTS"]}
+            if checklist.is_file()
+            else {}
+        )
+        validation = self.job_dir / "checklist_validation.json"
+        self.dwellings = read_json(validation, STAGE).get("dwellings", []) if validation.is_file() else []
+
+    def draft_dir(self, render_id: str) -> str:
+        """output/<home>/Draft: where every version of this render is kept with the DRAFT overlay."""
+        req = self.plan.get(render_id) or {
+            "render_id": render_id,
+            "dwelling_id": self.entry(render_id)["dwelling_id"],
+            "view_type": "",
+            "location": "",
+        }
+        return f"output/{home_folder(req, self.dwellings, self.view_set)}/{names(self.view_set)['draft']}"
 
     def _directives(self) -> Any:
         info = self.job_dir / "ingest.json"
@@ -87,6 +113,7 @@ class Renderer:
             atomic_write_json(self.index_path, self.index)
 
     def next_version(self, render_id: str) -> int:
+        recorded = [v["version"] for v in self.record(render_id)["versions"]]
         stem = safe_name(render_id, 80)
         pat = re.compile(rf"^{re.escape(stem)}_v(\d+)\.png$")
         seen = [
@@ -96,7 +123,7 @@ class Renderer:
             for f in d.iterdir()
             if (m := pat.match(f.name))
         ]
-        return max(seen, default=0) + 1
+        return max([*seen, *recorded], default=0) + 1
 
     def render(self, render_id: str, kind: str = "first", fix: list[str] | None = None) -> dict[str, Any]:
         """One version of one render. Errors other than PauseJobError are recorded, not raised."""
@@ -112,16 +139,21 @@ class Renderer:
         elif fix:
             prompt += "\nFIX FROM DRAWING CHECK (the previous image broke these; correct them)\n"
             prompt += "".join(f"- {f}\n" for f in fix)
+        draft = self.ctx.settings.images.openai.draft
         req = RenderRequest(
             render_id=render_id,
             prompt=prompt,
             references=[self.job_dir / r for r in e["references"]],
-            size=size_for(self.ctx.settings.images.openai.size, e.get("aspect", "landscape")),
+            size=size_for(draft.size, e.get("aspect", "landscape")),
             aspect=e.get("aspect", "landscape"),
+            quality=draft.quality,
         )
         try:
-            self.budget.reserve(render_id, e["dwelling_id"], kind, self.provider.name, self.provider.paid)
+            call = self.budget.reserve(
+                render_id, e["dwelling_id"], kind, self.provider.name, self.provider.paid, req.quality
+            )
             png, attempts = render_with_retry(self.provider, req, self.ctx.settings.images.retries, self.wait)
+            self.budget.add_usage(call, req.usage)
         except PauseJobError:
             raise
         except AgentError as err:
@@ -134,19 +166,24 @@ class Renderer:
             v = self.next_version(render_id)
             stem = f"{safe_name(render_id, 80)}_v{v}"
             clean = f"output/clean/{stem}.png"
+            draft_file = f"{self.draft_dir(render_id)}/{stem}.png"
             atomic_write_bytes(self.job_dir / clean, png)
-            atomic_write_bytes(self.job_dir / f"output/{stem}.png", draft_overlay(png))
+            atomic_write_bytes(self.job_dir / draft_file, draft_overlay(png))
+            prune_clean(self.job_dir, render_id, keep=clean)
         if fix:
             atomic_write_text(self.job_dir / f"prompts/{stem}.txt", prompt)
         rec["versions"].append(
             {
                 "version": v,
-                "file": f"output/{stem}.png",
+                "file": draft_file,
                 "clean_file": clean,
                 "provider": self.provider.name,
                 "model": self.provider.model,
                 "kind": kind,
                 "attempts": attempts,
+                "size": req.size,
+                "quality": req.quality,
+                "usage": req.usage,
                 "fix_instructions": fix or [],
                 "time": _now(),
             }
@@ -155,6 +192,18 @@ class Renderer:
         rec.pop("failed_prompt", None)
         self.save()
         return rec
+
+
+def prune_clean(job_dir: Path, render_id: str, keep: str | None = None) -> None:
+    """Deletes the overlay-free copies of this render except `keep` (the latest version): a replaced
+    version's clean copy is never delivered, so it is not kept (decision 20 Oct 2026)."""
+    folder = job_dir / "output" / "clean"
+    if not folder.is_dir():
+        return
+    pat = re.compile(rf"^{re.escape(safe_name(render_id, 80))}_v\d+\.png$")
+    for f in folder.iterdir():
+        if pat.match(f.name) and (keep is None or f.as_posix() != (job_dir / keep).as_posix()):
+            f.unlink(missing_ok=True)
 
 
 def _skip_reason(ctx: RunContext, e: dict[str, Any]) -> str | None:

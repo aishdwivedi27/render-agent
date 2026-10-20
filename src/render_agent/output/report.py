@@ -6,6 +6,7 @@ job folder is copied elsewhere."""
 from __future__ import annotations
 
 import html
+import json
 import re
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,37 @@ def compliance_footer(knowledge_dir: Path) -> str:
     return " ".join(m.group(1).split()) if m else ""
 
 
+def cost_section(costs: dict[str, Any] | None) -> str:
+    """Tokens and estimated cost: one row per render (drafts and final) and per LLM stage, then totals."""
+    if not costs:
+        return ""
+    from render_agent.output.costs import money
+
+    e = html.escape
+    cols = ("Item", "Calls", "Input tokens", "Output tokens", "Estimated cost")
+    head = "<tr>" + "".join(f"<th>{c}</th>" for c in cols) + "</tr>"
+
+    def row(name: str, t: dict[str, Any]) -> str:
+        return (
+            f"<tr><td>{e(name)}</td><td>{t['calls']}</td><td>{t['input_tokens']:,}</td>"
+            f"<td>{t['output_tokens']:,}</td><td>{e(money(t))}</td></tr>"
+        )
+
+    rows = [
+        row(f"{rid}: {kind}", t)
+        for rid, kinds in sorted(costs.get("images", {}).items())
+        for kind, t in sorted(kinds.items())
+    ]
+    rows += [row(f"LLM: {stage}", t) for stage, t in sorted(costs.get("llm", {}).items())]
+    tot = costs.get("totals", {})
+    rows += [
+        row(label, tot[k])
+        for k, label in (("images", "All images"), ("llm", "All LLM calls"), ("all", "Total"))
+        if k in tot
+    ]
+    return f"<h2>Tokens and cost</h2><p>{e(costs.get('note', ''))}</p><table>{head}{''.join(rows)}</table>"
+
+
 def write_report(
     job_dir: Path, review: dict[str, Any], manifest: dict[str, Any], knowledge_dir: Path
 ) -> Path:
@@ -46,13 +78,26 @@ def write_report(
     rows = []
     for rid, r in sorted(review["renders"].items()):
         v = r.get("version")
-        img = f"output/{rid}_v{v}.png" if v else ""
+        img = r.get("file") or (f"output/{rid}_v{v}.png" if v else "")
         thumb = f'<a href="{e(img)}"><img src="{e(img)}" alt="{e(rid)}"></a>' if img else "&mdash;"
         rows.append(
             f"<tr class='{e(r['status'])}'><td>{thumb}</td><td>{e(rid)}</td><td>{e(r['status'])}</td>"
             f"<td>{e(str(v or ''))}</td><td>{e(r.get('check') or '')}</td>"
             f"<td>{e(r.get('note') or r.get('reason') or '')}</td></tr>"
         )
+    costs = cost_section(manifest.get("costs"))
+    layouts = ""
+    index_file = job_dir / "prompts" / "index.json"
+    if index_file.is_file():
+        index = json.loads(index_file.read_text(encoding="utf-8")).get("renders", [])
+        items = [
+            f"<h3>{e(x['render_id'])} ({e(x['layout_source'])})</h3><p>{e(x.get('layout_note', ''))}</p>"
+            + (f"<pre>{e(x['room_layout'])}</pre>" if x.get("room_layout") else "")
+            for x in index
+            if x.get("interior")
+        ]
+        if items:
+            layouts = "<h2>Interior room layouts</h2>" + "".join(items)
     materials = ""
     mat = job_dir / "MATERIALS_AND_DEFAULTS.txt"
     if mat.is_file():
@@ -77,6 +122,8 @@ def write_report(
             "<p>Images below carry the DRAFT overlay; approved renders are delivered clean "
             "in the Common and Dwelling folders.</p>",
             f"<table>{head}{''.join(rows)}</table>",
+            costs,
+            layouts,
             materials,
             f"<footer>{e(compliance_footer(knowledge_dir))}</footer>",
             "</body></html>",

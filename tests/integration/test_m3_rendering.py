@@ -84,13 +84,15 @@ def test_render_and_check_all(install_settings):
     for rid, rec in idx.items():
         v = rec["versions"][0]
         draft, clean = job.dir / v["file"], job.dir / v["clean_file"]
-        assert v["file"] == f"output/{rid}_v1.png" and clean.parent.name == "clean"
-        assert Image.open(draft).tobytes() != Image.open(clean).tobytes()  # DRAFT overlay on the copy
+        assert v["file"].endswith(f"/Draft/{rid}_v1.png") and clean.parent.name == "clean"
+        if len(rec["versions"]) == 1:  # only the latest version keeps an overlay-free copy
+            assert Image.open(draft).tobytes() != Image.open(clean).tobytes()  # DRAFT overlay on the copy
     # failed check -> one regeneration with the fix, then pass
     rear = idx["P1-D1-REAR"]["versions"]
     assert [v["version"] for v in rear] == [1, 2] and rear[1]["kind"] == "auto_retry"
     assert "Remove the window on the garage wall." in (job.dir / "prompts" / "P1-D1-REAR_v2.txt").read_text()
-    assert (job.dir / "output" / "P1-D1-REAR_v1.png").is_file()  # v1 kept
+    assert (job.dir / rear[0]["file"]).is_file()  # v1 kept with its DRAFT overlay
+    assert not (job.dir / rear[0]["clean_file"]).exists() and (job.dir / rear[1]["clean_file"]).is_file()
     checks = _checks(job)
     assert checks["P1-D1-REAR"]["outcome"] == "Passed drawing check" and checks["P1-D1-REAR"]["version"] == 2
     assert checks["P1-SHARED-KIT"]["outcome"] == "Not checked"

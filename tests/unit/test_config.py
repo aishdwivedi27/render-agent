@@ -99,15 +99,33 @@ def test_keys_load_from_dotenv_and_env_wins(install, monkeypatch):
     assert load_config(install).secret("OPENAI_API_KEY") == "sk-from-env-abcdef"
 
 
-@pytest.mark.parametrize("size", ["1024x1024", "1280x640", "auto"])
-def test_render_size_must_be_hd(install, size):
-    _edit(install, lambda c: c["images"]["openai"].update(size=size))
-    assert "images.openai.size" in _invalid(install).what_happened
+def test_draft_may_be_cheaper(install):
+    _edit(install, lambda c: c["images"]["openai"]["draft"].update(size="1024x576", quality="low"))
+    s = load_config(install)
+    assert (s.images.openai.draft.size, s.images.openai.draft.quality) == ("1024x576", "low")
 
 
-def test_render_quality_must_be_high(install):
-    _edit(install, lambda c: c["images"]["openai"].update(quality="medium"))
-    assert "images.openai.quality" in _invalid(install).what_happened
+def test_render_size_must_be_wxh_and_quality_known(install):
+    _edit(install, lambda c: c["images"]["openai"]["draft"].update(size="auto"))
+    assert "images.openai.draft.size" in _invalid(install).what_happened
+    _edit(install, lambda c: c["images"]["openai"]["draft"].update(size="1536x864", quality="ultra"))
+    assert "images.openai.draft.quality" in _invalid(install).what_happened
+
+
+def test_legacy_settings_still_load(install):
+    def legacy(c):
+        o = c["images"]["openai"]
+        o.update(o.pop("draft"))
+        o["final"] = {"size": "2560x1440", "quality": "high"}  # ignored since 20 Oct 2026
+
+    _edit(install, legacy)
+    s = load_config(install)
+    assert (s.images.openai.draft.size, s.images.openai.draft.quality) == ("1536x864", "medium")
+
+
+def test_delivery_size_must_be_wxh(install):
+    _edit(install, lambda c: c["images"].update(delivery_size="big"))
+    assert "images.delivery_size" in _invalid(install).what_happened
 
 
 def test_final_long_edge_below_hd_refused(install):

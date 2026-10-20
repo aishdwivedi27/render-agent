@@ -114,7 +114,7 @@ class ReviewApp:
     def card(self, c: dict[str, Any]) -> str:
         e = html.escape
         rid, status, v = c["render_id"], c["status"], c.get("version")
-        img = f"/file/output/{rid}_v{v}.png" if v else ""
+        img = f"/file/{c['file']}" if c.get("file") else (f"/file/output/{rid}_v{v}.png" if v else "")
         ref = f"/file/{c['reference']}" if c.get("reference") else ""
         imgs = "".join(
             f"<a href='{e(u)}' target='_blank'><img src='{e(u)}' alt='{e(alt)}'></a>"

@@ -75,7 +75,7 @@ def get_review(job_id: str, ctx: Ctx) -> dict[str, Any]:
                 "where": p.get("location") or "",
                 "dwelling": p.get("dwelling_id") or "",
                 "version": v,
-                "image": f"output/{safe_name(rid, 80)}_v{v}.png" if v else None,
+                "image": e.get("file") or (f"output/{safe_name(rid, 80)}_v{v}.png" if v else None),
                 "reference": refs[0] if refs else None,
                 "check": CHECK_TEXT.get(e.get("check") or "", e.get("check") or "Not checked"),
                 "uncertain": e.get("check") != PASSED,
@@ -131,7 +131,8 @@ def decide(job_id: str, render_id: str, body: DecideIn, ctx: Ctx) -> dict[str, A
                 "suggest_rule": body.suggest_rule,
                 "applies_to_job": body.apply_to_job,
                 "where": "review",
-                "image": f"output/{safe_name(render_id, 80)}_v{v}.png" if v else None,
+                "image": review["renders"][render_id].get("file")
+                or (f"output/{safe_name(render_id, 80)}_v{v}.png" if v else None),
             },
         )
     return {"ok": True, "warning": warning}

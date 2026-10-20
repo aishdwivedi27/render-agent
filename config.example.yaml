@@ -33,14 +33,16 @@ images:
   enabled_providers: [openai] # offered in the app; muapi stays in the code (add it here to offer it)
   openai:
     model: gpt-image-2        # or gpt-image-2.5-flare, gpt-image-2.5-sunburst
-    size: 1536x1024
-    quality: high
+    # gpt-image-2 takes any WxH (multiples of 16). Portrait renders swap width and height.
+    # Every render; the approved one is delivered (DRAFT mark removed, scaled to delivery_size).
+    draft: {size: 1536x864, quality: medium}   # quality: low | medium | high
   muapi:
     edit_model: nano-banana-2-edit
     generate_model: nano-banana-2
     timeout_seconds: 600
   references_per_render: 3
-  final_long_edge: 1920       # Final images are upscaled to Full HD width; size must be at least 1280x720, quality high
+  delivery_size: 1920x1080    # approved renders: DRAFT mark removed, cropped to 16:9 and scaled (Lanczos) to this
+  room_crop_margin: 0.04      # page fraction around a room's bbox in interior reference crops
   concurrency: 2
   retries: 5
   max_images_per_round: null  # M5.5 refinement: cap on paid image calls per job run (null = off)
@@ -75,3 +77,9 @@ notify:
 designer:
   desktop: ""                 # empty: the Windows Desktop folder; set a path only for testing
   folder: RenderAgent         # Desktop\RenderAgent\{Input,Output,History}
+
+# Prices for the token and cost report: USD per 1 million tokens, per model id. Check them against
+# the provider's pricing page; leave a value empty and tokens are shown with "price not set".
+pricing:
+  gpt-image-2: {input: null, output: null, image_input: null}
+  gpt-5.6-sol: {input: null, output: null}

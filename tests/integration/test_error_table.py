@@ -53,6 +53,16 @@ ROWS: dict[tuple[str, str], list[str]] = {
     ("Extraction", "Invalid/empty bbox"): [
         "tests.integration.test_m2_planning::test_gate_refuses_unresolved_then_approves_and_s6_builds_prompts"
     ],
+    ("Extraction", "Room layouts from the sheets do not fit `schemas/house_spec.json` ROOMS"): [
+        "tests.integration.test_m2_planning::test_room_layout_that_breaks_the_schema_stops_stage4"
+    ],
+    ("Prompts", "Interior render with no matching room, no openings or fixtures read, or no wall to face"): [
+        "tests.unit.test_room_layout::test_room_without_layout_falls_back"
+    ],
+    ("Prompts", "Room bbox invalid"): ["tests.unit.test_room_layout::test_invalid_room_bbox_gives_no_crop"],
+    ("Drawing check", "Interior answer without `opening_walls` and `fixture_positions`"): [
+        "tests.unit.test_room_layout::test_interior_check_uses_wall_and_fixture_checks"
+    ],
     ("Planning", "> 16 renders for a dwelling, or counts wrong"): [
         "tests.unit.test_checklist_validator::test_limit_trims_from_the_bottom_of_the_priority_list"
     ],

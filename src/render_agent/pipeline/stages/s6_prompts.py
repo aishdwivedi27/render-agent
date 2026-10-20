@@ -1,8 +1,14 @@
 """Reference crops from bboxes + fixed identity block + assembled prompt files (docs/SPEC.md section 6).
 
 Prompt order: fixed identity block (identical in every prompt for a dwelling) -> reference legend ->
-scene / camera / lighting from the LLM -> must-preserve and must-avoid plus global rules ->
-visualisation choices labelled as undocumented.
+scene / camera / lighting from the LLM -> room layout (interiors) or facade order (exteriors) ->
+must-preserve and must-avoid plus global rules -> visualisation choices labelled as undocumented.
+
+Interiors: the room is found in the specification's ROOMS, the camera wall comes from the view's
+`camera` rule in view_set.yaml, and code writes the ROOM LAYOUT block in the viewer's frame. The
+room is cropped from its floor plan (bbox + images.room_crop_margin) and given to the image model
+instead of the whole plan and the site plan. No usable layout -> today's references and text, with
+the reason in prompts/index.json. Size and opening codes are stripped from all image-prompt text.
 """
 
 from __future__ import annotations
@@ -15,6 +21,14 @@ from typing import TYPE_CHECKING, Any
 
 from PIL import Image
 
+from render_agent.pipeline.room_layout import (
+    camera_wall,
+    find_room,
+    layout_block,
+    strip_codes,
+    strip_lines,
+    usable,
+)
 from render_agent.pipeline.selections import NOT_FOUND, STANDARD_DEFAULT, final_value
 from render_agent.pipeline.stages._common import ingest_info, llm_for, load_schema, read_json
 from render_agent.pipeline.stages.s5_checklist import view_catalog
@@ -36,6 +50,12 @@ CROP_PAD = 0.01  # fraction of the page added around each bbox
 MIN_BBOX_SIDE = 0.02  # a smaller bbox is treated as invalid
 NOT_REFERENCE_KINDS = {"legend", "schedule"}
 LABEL_BELOW = 0.06  # dwelling labels may sit this far (page fraction) below an elevation's bbox
+ROTATE_TO_TOP = {
+    "top": 0,
+    "bottom": 180,
+    "left": -90,
+    "right": 90,
+}  # PIL degrees, counter-clockwise
 log = logging.getLogger("render_agent.s6")
 
 
@@ -49,7 +69,7 @@ def valid_bbox(b: dict[str, float]) -> bool:
     )
 
 
-def crop_view(page_png: Path, bbox: dict[str, float], out: Path) -> bool:
+def crop_view(page_png: Path, bbox: dict[str, float], out: Path, pad: float = CROP_PAD) -> bool:
     """Crops the bbox (padded) to `out`; the full sheet when the bbox is invalid. True if cropped."""
     with Image.open(page_png) as page:
         img: Image.Image = page
@@ -57,10 +77,10 @@ def crop_view(page_png: Path, bbox: dict[str, float], out: Path) -> bool:
         if ok:
             w, h = img.size
             box = (
-                max(0, int((bbox["x0"] - CROP_PAD) * w)),
-                max(0, int((bbox["y0"] - CROP_PAD) * h)),
-                min(w, int((bbox["x1"] + CROP_PAD) * w + 0.5)),
-                min(h, int((bbox["y1"] + CROP_PAD) * h + 0.5)),
+                max(0, int((bbox["x0"] - pad) * w)),
+                max(0, int((bbox["y0"] - pad) * h)),
+                min(w, int((bbox["x1"] + pad) * w + 0.5)),
+                min(h, int((bbox["y1"] + pad) * h + 0.5)),
             )
             img = img.crop(box)
         buf = BytesIO()
@@ -165,6 +185,61 @@ def make_references(ctx: RunContext, spec: dict[str, Any] | None = None) -> dict
             if regions:
                 log.info("job %s: %s split per dwelling: %s", job.id, v["view_id"], sorted(regions))
     return out
+
+
+def room_reference(ctx: RunContext, room: dict[str, Any]) -> dict[str, Any] | None:
+    """Crops a ROOMS entry from its floor-plan page (bbox + images.room_crop_margin) to
+    references/room-*.png; None when the bbox is invalid or the page is unknown."""
+    pages = {p["page"]: p for p in ingest_info(ctx)["pages"]}
+    page = pages.get(room.get("page"))  # type: ignore[arg-type]
+    if page is None or not valid_bbox(room["bbox"]):
+        return None
+    key = f"room:{room['dwelling_id']}:{room['name']}"
+    rel = f"references/room-{safe_name(room['dwelling_id'], 30)}-{safe_name(room['name'], 40)}.png"
+    margin = ctx.settings.images.room_crop_margin
+    crop_view(ctx.job.dir / page["image"], room["bbox"], ctx.job.dir / rel, margin)
+    turn = ROTATE_TO_TOP.get(room.get("camera_face", "top"), 0)
+    if turn:  # the wall the camera faces goes to the top, so left and right match the view
+        with Image.open(ctx.job.dir / rel) as im:
+            buf = BytesIO()
+            im.rotate(turn, expand=True).save(buf, format="PNG")
+        atomic_write_bytes(ctx.job.dir / rel, buf.getvalue())
+    return {
+        "view_id": key,
+        "page": room["page"],
+        "label": f"{room['name']} cut from the floor plan and turned so the wall you face is at the top "
+        "(your left is the image's left), with the rooms around it",
+        "view_kind": "floor_plan",
+        "facing": "top_down",
+        "dwellings_shown": [room["dwelling_id"]],
+        "file": rel,
+        "cropped": True,
+        "facade_left_to_right": [],
+    }
+
+
+def interior_layout(
+    spec: dict[str, Any],
+    r: dict[str, Any],
+    view: dict[str, Any],
+    names: list[str],
+    shapes: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any] | None, str, str]:
+    """(room, ROOM LAYOUT block, note). No usable layout: (None, "", why)."""
+    camera = view.get("camera") or {}
+    room = find_room(spec, r, names, camera.get("room_words", []))
+    if room is None:
+        return None, "", "no room of this dwelling in ROOMS matches the render's location"
+    if not usable(room):
+        return None, "", f"{room['name']}: no openings or fixtures were read on its walls"
+    face, why = camera_wall(room, camera)
+    if face is None:
+        return None, "", f"{room['name']}: {why}"
+    return (
+        {**room, "camera_face": face},
+        layout_block(room, face, camera, why, shapes),
+        f"{room['name']}: camera {why} ({face} wall on the plan)",
+    )
 
 
 def localise(chosen: list[str], dwelling: str, refs: dict[str, dict[str, Any]]) -> list[str]:
@@ -310,7 +385,24 @@ def assemble(
     render_req: dict[str, Any],
     global_rules: str,
     facade: str = "",
+    strip: list[str] | None = None,
+    drop_words: list[str] | None = None,
 ) -> str:
+    """The image prompt. Size and opening codes (`strip` patterns) are removed from every part that
+    comes from the drawings or the scene LLM; lines about sizes (`drop_words`) are left out."""
+    pats, drop = strip or [], drop_words or []
+    scene = {
+        **scene,
+        **{k: strip_codes(scene[k], pats) for k in ("scene", "camera", "lighting", "people_and_vehicles")},
+        "must_preserve": strip_lines(scene["must_preserve"], pats, drop),
+        "must_avoid": strip_lines(scene["must_avoid"], pats, drop),
+    }
+    render_req = {
+        **render_req,
+        "location": strip_codes(render_req["location"], pats),
+        "architectural_facts": strip_lines(render_req.get("architectural_facts", []), pats, drop),
+    }
+    facade = strip_codes(facade, pats) if facade else ""
     parts = [
         identity,
         "REFERENCE IMAGES\n" + ("\n".join(legend) if legend else "- No reference drawing is available."),
@@ -357,8 +449,20 @@ def run(ctx: RunContext) -> str:
     refs = make_references(ctx, spec)
     swatches = load_swatches(ctx.settings.path("knowledge"))
     aliases = dwelling_aliases(spec)
+    strip = view_set.get("image_prompt_strip_patterns", [])
+    drop = view_set.get("image_prompt_drop_lines_with", [])
+    views = {v["id"]: v for v in rules.views}
 
     renders, skipped = _approved_renders(job.dir, checklist, view_set)
+    layouts: dict[str, tuple[dict[str, Any] | None, str, str]] = {}
+    for r in renders:
+        view = views.get(rules.view_id(r) or "", {})
+        if view.get("interior"):
+            names = aliases.get(r["dwelling_id"], [r["dwelling_id"]])
+            layouts[r["render_id"]] = interior_layout(spec, r, view, names, view_set.get("opening_shapes"))
+    scene_input = [
+        {**r, "room_layout": layouts[r["render_id"]][1]} if r["render_id"] in layouts else r for r in renders
+    ]
     scenes: dict[str, dict[str, Any]] = {}
     if renders:
         defaults = (ctx.settings.path("knowledge") / "visualisation_defaults.md").read_text(encoding="utf-8")
@@ -377,7 +481,7 @@ def run(ctx: RunContext) -> str:
                         ensure_ascii=False,
                     ),
                 ),
-                "CHECKLIST": quote_block("CHECKLIST", json.dumps(renders, indent=1, ensure_ascii=False)),
+                "CHECKLIST": quote_block("CHECKLIST", json.dumps(scene_input, indent=1, ensure_ascii=False)),
                 "SPEC": quote_block("HOUSE_SPECIFICATION", json.dumps(spec, indent=1, ensure_ascii=False)),
             },
         )
@@ -403,11 +507,23 @@ def run(ctx: RunContext) -> str:
         chosen = pick_references(scene["reference_view_ids"], r, refs, rules, max_refs)
         if rules.view_id(r) != "streetscape":  # the streetscape shows every dwelling: whole elevation
             chosen = localise(chosen, dwelling, refs)
+        interior = r["render_id"] in layouts
+        room, layout, layout_note = layouts.get(r["render_id"], (None, "", ""))
+        crop = room_reference(ctx, room) if room else None
+        if room and crop is None:
+            layout_note += "; its bbox is invalid, so the whole floor plan is the reference"
+        if crop:
+            refs[crop["view_id"]] = crop
+            plans = [v for v in chosen if refs[v]["view_kind"] == "floor_plan"]
+            chosen = [crop["view_id"], *plans][:max_refs]
+        if interior and not layout:
+            log.warning("job %s: %s has no usable room layout (%s)", job.id, r["render_id"], layout_note)
         facade, facade_src = (
             facade_for(chosen, dwelling, refs, aliases) if rules.view_id(r) != "streetscape" else ([], "")
         )
         legend = [_legend_line(i, refs[v]) for i, v in enumerate(chosen, 1)]
-        text = assemble(identity, legend, scene, r, global_rules, facade_block(facade, facade_src))
+        block = layout or facade_block(facade, facade_src)
+        text = assemble(identity, legend, scene, r, global_rules, block, strip, drop)
         rel = f"prompts/{safe_name(r['render_id'], 80)}.txt"
         atomic_write_text(job.dir / rel, text)
         index.append(
@@ -421,6 +537,10 @@ def run(ctx: RunContext) -> str:
                 "reference_view_ids": chosen,
                 "facade_left_to_right": facade,
                 "facade_source": facade_src,
+                "interior": interior,
+                "room_layout": layout,
+                "layout_source": ("room" if layout else "fallback") if interior else "",
+                "layout_note": layout_note,
                 "aspect": scene["aspect"],
                 "scene_source": source,
                 "visualisation_choices": scene["visualisation_choices"],

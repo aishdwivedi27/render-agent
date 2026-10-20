@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import io
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -29,6 +29,8 @@ class RenderRequest:
     references: list[Path]
     size: str
     aspect: str = "landscape"
+    quality: str = ""  # "" = the provider's configured quality
+    usage: dict[str, int] = field(default_factory=dict)  # tokens the provider reports, filled in by render()
 
 
 class ImageProvider(Protocol):

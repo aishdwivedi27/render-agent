@@ -44,7 +44,23 @@ class OpenAILLM(BaseLLM):
             resp = self.client.responses.create(**self._request(prompt, images, schema, schema_name))
         except openai.OpenAIError as exc:
             raise map_vendor_error(exc, openai, "OpenAI") from exc
-        return parse_response(resp)
+        result = parse_response(resp)
+        result.usage = usage_of(resp)
+        return result
+
+
+def usage_of(resp: Any) -> dict[str, int]:
+    """Input, output and reasoning tokens of a Responses API answer ({} when not reported)."""
+    u = getattr(resp, "usage", None)
+    if u is None:
+        return {}
+    details = getattr(u, "output_tokens_details", None)
+    out = {
+        "input_tokens": int(getattr(u, "input_tokens", 0) or 0),
+        "output_tokens": int(getattr(u, "output_tokens", 0) or 0),
+        "reasoning_tokens": int(getattr(details, "reasoning_tokens", 0) or 0) if details is not None else 0,
+    }
+    return {k: v for k, v in out.items() if v}
 
 
 def parse_response(resp: Any) -> SendResult:

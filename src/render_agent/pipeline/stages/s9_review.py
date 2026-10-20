@@ -3,7 +3,9 @@
 review.json holds one entry per render: pending | approved | flagged (+ note) | failed.
 - Decisions come from the review page, the `review` CLI command, or review.txt in the job folder:
   one `<render_id>: <note>` line per flag, and `approve all` to approve every other pending render.
-- Approved renders are locked and exported clean (no DRAFT overlay) to Common / Dwelling N folders.
+- Approved renders are locked and delivered as the approved image itself (decision 20 Oct 2026): its
+  clean copy (no DRAFT overlay) scaled to images.delivery_size goes to <folder>/FINAL APPROVED, its
+  DRAFT copy to <home>/Draft/draft-final, and the clean copy is then deleted. Approval makes no image call.
 - Flagged renders, and only those, are regenerated with the note (stage 7 path, kind "review",
   counted in budget.json) and re-checked (stage 8); the new version goes back to pending.
 - The job is SUCCEEDED when every render is approved; until then it waits at AWAITING_REVIEW.
@@ -17,10 +19,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from render_agent.errors import PermanentError
+from render_agent.output.costs import summarise
 from render_agent.output.folders import export_approved
 from render_agent.pipeline.runner import StageWaiting
 from render_agent.pipeline.stages._common import read_json
-from render_agent.pipeline.stages.s7_render import Renderer, latest
+from render_agent.pipeline.stages.s7_render import Renderer, latest, prune_clean
 from render_agent.pipeline.stages.s8_check import Checker
 from render_agent.util.fs import atomic_write_json, sha256_file
 from render_agent.validate.checklist_validator import load_view_set
@@ -62,6 +65,10 @@ def load_review(job_dir: Path) -> dict[str, Any]:
                 )
         elif entry["status"] != "approved" and entry.get("version") != ver["version"]:
             entry.update(status="pending", version=ver["version"], note=None)
+        if ver is not None and entry.get("version"):
+            shown = next((x for x in rec["versions"] if x["version"] == entry["version"]), None)
+            if shown:
+                entry["file"] = shown["file"]  # the DRAFT-overlay image of the version under review
     return review
 
 
@@ -172,12 +179,13 @@ def regenerate_flagged(ctx: RunContext, review: dict[str, Any]) -> list[str]:
 
 
 def deliver(ctx: RunContext, review: dict[str, Any]) -> dict[str, Any]:
-    """Exports approved renders and writes manifest.json."""
+    """Exports approved renders (clean copy, delivery size) and writes manifest.json."""
     job = ctx.job
     approved = {rid: e["version"] for rid, e in review["renders"].items() if e["status"] == "approved"}
     checklist = read_json(job.dir / "checklist.json", STAGE)
     dwellings = read_json(job.dir / "checklist_validation.json", STAGE).get("dwellings", [])
     view_set = load_view_set(ctx.settings.path("knowledge"))
+    drafts = {rid: review["renders"][rid]["file"] for rid in approved if review["renders"][rid].get("file")}
     try:
         exported = export_approved(
             job.dir,
@@ -185,7 +193,8 @@ def deliver(ctx: RunContext, review: dict[str, Any]) -> dict[str, Any]:
             approved,
             dwellings,
             view_set,
-            ctx.settings.images.final_long_edge,
+            ctx.settings.images.delivery_size,
+            drafts=drafts,
         )
     except FileNotFoundError as exc:
         raise PermanentError(
@@ -194,6 +203,8 @@ def deliver(ctx: RunContext, review: dict[str, Any]) -> dict[str, Any]:
             likely_cause="A file in output/clean/ was deleted or moved.",
             what_to_do="Flag the render to regenerate it, then resume the job.",
         ) from exc
+    for rid in approved:
+        prune_clean(job.dir, rid)  # delivered: the overlay-free copy is no longer needed
     knowledge = ctx.settings.path("knowledge")
     manifest = {
         "job_id": job.id,
@@ -206,6 +217,7 @@ def deliver(ctx: RunContext, review: dict[str, Any]) -> dict[str, Any]:
         "failed": sorted(rid for rid, e in review["renders"].items() if e["status"] == "failed"),
         "knowledge_files": {p.name: sha256_file(p) for p in sorted(knowledge.glob("*")) if p.is_file()},
         "budget": read_json(job.dir / "budget.json", STAGE) if (job.dir / "budget.json").is_file() else {},
+        "costs": summarise(job.dir, ctx.settings),
     }
     atomic_write_json(job.dir / MANIFEST, manifest)
     from render_agent.output.report import write_report

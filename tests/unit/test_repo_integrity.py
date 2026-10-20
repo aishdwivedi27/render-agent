@@ -90,7 +90,9 @@ def test_prompt_placeholders_are_known():
         "FACTS",
         "OPENINGS",
         "IDENTITY",
-        "FACADE",
+        "LAYOUT",
+        "VIEW_KIND_NOTE",
+        "CHECK_LIST",
     }
     for p in (ROOT / "private" / "prompts").glob("*.md"):
         found = set(re.findall(r"\{\{([A-Z_]+)\}\}", p.read_text(encoding="utf-8")))
