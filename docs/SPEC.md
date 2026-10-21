@@ -1,4 +1,4 @@
-Last synced with the live page: 20 Oct 2026
+Last synced with the live page: 21 Oct 2026
 
 # Drawing-to-Render Agent: Specification (developer copy)
 
