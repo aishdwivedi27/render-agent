@@ -111,7 +111,7 @@ class JobWorker:
         job_dir = find_job_dir(settings, job_id)
         if job_dir is not None:
             job = load_job(job_dir)
-            problem = designer.publish(job)
+            problem = designer.publish(job) or designer.complete(settings, job)
             info = job.state.get("designer")
             if info is not None and info.get("publish_problem") != problem:
                 info["publish_problem"] = problem

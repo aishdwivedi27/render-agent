@@ -62,13 +62,27 @@ class Env:
             reload=lambda: load_config(install),
         )
         self.client = TestClient(create_app(self.ctx))
+        self.auto_views = True
         self.folders = designer.folders(self.settings)
 
     def post(self, url: str, body: object = None, **kw: object):
         return self.client.post(url, json=body, headers={TOKEN_HEADER: TOKEN}, **kw)
 
     def drain(self) -> None:
+        """Runs queued jobs; jobs at Choose views take the default ticks (unless auto_views is off)."""
         self.ctx.worker.drain()
+        while self.auto_views:
+            waiting = [
+                j["id"]
+                for j in self.client.get("/api/home").json()["jobs"]
+                if j["status"] == "AWAITING_VIEWS"
+            ]
+            if not waiting:
+                return
+            for job_id in waiting:
+                views = self.client.get(f"/api/jobs/{job_id}/views").json()["views"]
+                self.post(f"/api/jobs/{job_id}/views", {"views": [v["id"] for v in views if v["ticked"]]})
+            self.ctx.worker.drain()
 
     def drop(self, src: Path, name: str | None = None) -> Path:
         dest = self.folders.input / (name or src.name)
@@ -451,7 +465,9 @@ def test_reopening_the_app_resumes_queued_and_running_jobs(env):
     fresh = make_context(env.settings, TOKEN, extras=lambda: {"llm": env.llm, "image_provider": env.provider})
     assert job_id in fresh.worker.resume_on_launch()
     fresh.worker.drain()
-    assert load_job(env.settings.path("jobs") / job_id).state["status"] == "AWAITING_APPROVAL"
+    assert (
+        load_job(env.settings.path("jobs") / job_id).state["status"] == "AWAITING_VIEWS"
+    )  # the first stop of an app job
 
 
 def test_output_not_writable_keeps_job_state(env):
@@ -548,3 +564,297 @@ def test_editing_feedback_on_a_flagged_render_uses_the_new_note(env):
         "first try",
         "the WIR sits beside the ensuite",
     ]
+
+
+def test_only_flagged_drafts_are_regenerated_and_untouched_ones_stay(env):
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    _approve(env, job_id)
+    env.drain()
+    cards = [c for c in env.client.get(f"/api/jobs/{job_id}/review").json()["cards"] if c["image"]]
+    assert len(cards) >= 2
+    for c in cards:  # drafts live in <Dwelling N | Common>/Draft and are served from there
+        assert c["image"].startswith("output/") and "/Draft/" in c["image"], c["image"]
+        assert env.client.get(f"/api/jobs/{job_id}/file/{c['image']}").status_code == 200
+    flagged, untouched = cards[0], cards[1]
+    r = env.post(
+        f"/api/jobs/{job_id}/review/{flagged['render_id']}",
+        {"action": "flag", "category": "other", "note": "move the door to the left"},
+    )
+    assert r.status_code == 200, r.json()
+    budget = env.settings.path("jobs") / job_id / "budget.json"
+    calls_before = len(json.loads(budget.read_text(encoding="utf-8"))["calls"])
+    env.provider.calls.clear()
+    env.post(f"/api/jobs/{job_id}/review/continue")
+    env.drain()
+    assert [c.render_id for c in env.provider.calls] == [flagged["render_id"]]
+    calls = json.loads(budget.read_text(encoding="utf-8"))["calls"][calls_before:]
+    assert [(c["render_id"], c["kind"]) for c in calls] == [(flagged["render_id"], "review")]
+    after = {c["render_id"]: c for c in env.client.get(f"/api/jobs/{job_id}/review").json()["cards"]}
+    assert after[flagged["render_id"]]["version"] == flagged["version"] + 1
+    assert after[flagged["render_id"]]["status"] == "pending"
+    kept = after[untouched["render_id"]]
+    assert (kept["status"], kept["version"], kept["image"]) == (
+        "pending",
+        untouched["version"],
+        untouched["image"],
+    )
+
+    # approving delivers the approved draft itself: no further image call
+    env.provider.calls.clear()
+    for rid in after:
+        env.post(f"/api/jobs/{job_id}/review/{rid}", {"action": "approve"})
+    env.post(f"/api/jobs/{job_id}/review/continue")
+    env.drain()
+    assert env.provider.calls == []
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "SUCCEEDED"
+    assert job["folders"] == {
+        "shared": "Common",
+        "draft": "Draft",
+        "draft_final": "draft-final",
+        "final": "FINAL APPROVED",
+    }
+
+
+def test_app_text_names_the_current_output_folders():
+    js = (Path(designer.__file__).parent / "static" / "app.js").read_text(encoding="utf-8")
+    assert "\\Final<" not in js and "f.final" in js and "f.draft_final" in js
+
+
+def test_views_are_chosen_after_reading_then_planned_then_approved(env):
+    env.auto_views = False
+    r = env.post("/api/views/interpret", {"text": "Only external front and back elevation"})
+    assert [v["id"] for v in r.json()["views"]] == ["front_day", "rear_day"]
+
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert (job["status"], job["screen"], job["step"], job["step_name"]) == (
+        "AWAITING_VIEWS",
+        "views",
+        2,
+        "Choose views",
+    )
+    jd = env.settings.path("jobs") / job_id
+    assert not (jd / "checklist.json").exists()  # nothing is planned before the choice
+    v = env.client.get(f"/api/jobs/{job_id}/views").json()
+    rows = {x["id"]: x for x in v["views"]}
+    assert rows["front_day"]["required"] and rows["front_day"]["ticked"]
+    assert not rows["front_night"]["ticked"] and rows["front_night"]["possible"]  # optional: tickable
+    assert env.post(f"/api/jobs/{job_id}/views", {"views": []}).status_code == 422
+    assert env.post(f"/api/jobs/{job_id}/views", {"views": ["not_a_view"]}).status_code == 422
+
+    exterior = [x["id"] for x in v["views"] if not x["interior"] and x["possible"]]
+    r = env.post(f"/api/jobs/{job_id}/views", {"views": exterior, "words": "external only"})
+    assert r.status_code == 200, r.json()
+    env.drain()
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert (job["status"], job["step"]) == ("AWAITING_APPROVAL", 3)
+    a = env.client.get(f"/api/jobs/{job_id}/approval").json()
+    planned = [x for xs in a["dwellings"].values() for x in xs]
+    assert planned and not any(x["view"] in {"Kitchen", "Bedroom", "Ensuite", "Laundry"} for x in planned)
+    assert "@views=" + ",".join(exterior) in json.loads((jd / "ingest.json").read_text())["instructions"]
+    assert json.loads((jd / "views_chosen.json").read_text())["words"] == "external only"
+
+    # Change the views from approval: back to Choose views, then the plan is made again
+    r = env.post(f"/api/jobs/{job_id}/approval/choose-views")
+    assert r.status_code == 200, r.json()
+    env.drain()
+    assert env.client.get(f"/api/jobs/{job_id}").json()["status"] == "AWAITING_VIEWS"
+    again = env.client.get(f"/api/jobs/{job_id}/views").json()
+    assert {x["id"] for x in again["views"] if x["ticked"]} == set(exterior)  # the last choice
+    assert again["words"] == "external only"
+    env.post(f"/api/jobs/{job_id}/views", {"views": [*exterior, "kitchen"]})
+    env.drain()
+    a = env.client.get(f"/api/jobs/{job_id}/approval").json()
+    assert any(c.startswith("Added:") for c in a["changes"]), a["changes"]
+
+
+def test_cli_job_skips_choose_views(install_settings):
+    from render_agent.pipeline.job import new_job
+    from render_agent.pipeline.runner import RunContext, run_job
+    from tests.integration.test_m2_planning import _llm
+
+    pdf = make_pdf(install_settings.root / "cli" / "a.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job = new_job(install_settings.path("jobs"), [pdf])
+    assert run_job(RunContext(job, install_settings, extras={"llm": _llm()})).status == "AWAITING_APPROVAL"
+
+
+def test_answers_at_approval_replan_with_corrections_before_any_render(env):
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    env.llm.calls.clear()
+    env.provider.calls.clear()
+    r = env.post(
+        f"/api/jobs/{job_id}/approval/replan",
+        {"corrections": [{"fact": "Garage window size disagrees", "value": "1800 wide", "note": ""}]},
+    )
+    assert r.status_code == 200, r.json()
+    env.drain()
+    stages = [c["stage"] for c in env.llm.calls]
+    assert "spec" in " ".join(stages) and "checklist" in " ".join(stages)
+    assert all("JOB_CORRECTIONS" in c["prompt"] and "1800 wide" in c["prompt"] for c in env.llm.calls)
+    assert env.provider.calls == []  # no image before approval
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "AWAITING_APPROVAL"
+    a = env.client.get(f"/api/jobs/{job_id}/approval").json()
+    assert a["changes"] is not None and a["corrections"][-1]["value"] == "1800 wide"
+    lines = (env.settings.path("feedback") / "feedback.jsonl").read_text(encoding="utf-8").splitlines()
+    assert json.loads(lines[-1])["correction"] == "Garage window size disagrees: 1800 wide"
+
+
+def test_finished_job_lands_in_completed_and_home_says_so(env):
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    _approve(env, job_id)
+    env.drain()
+    for c in env.client.get(f"/api/jobs/{job_id}/review").json()["cards"]:
+        env.post(f"/api/jobs/{job_id}/review/{c['render_id']}", {"action": "approve"})
+    env.post(f"/api/jobs/{job_id}/review/continue")
+    env.drain()
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "SUCCEEDED" and job["step"] == 6
+    out = Path(job["output_folder"])
+    assert out.parent == env.folders.output / "Completed"
+    assert list(out.rglob("FINAL APPROVED/*.png"))
+    home = env.client.get("/api/home").json()
+    assert next(j for j in home["jobs"] if j["id"] == job_id)["output_folder"] == str(out)
+
+
+def test_views_words_that_match_nothing_are_listed_and_every_view_planned(install_settings):
+    from render_agent.pipeline.job import new_job
+    from render_agent.pipeline.runner import RunContext, run_job
+    from tests.integration.test_m2_planning import _llm
+
+    pdf = make_pdf(install_settings.root / "cli" / "a.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    txt = pdf.with_suffix(".txt")
+    txt.write_text("@views=garage roof\n", encoding="utf-8")
+    job = new_job(install_settings.path("jobs"), [pdf, txt])
+    run_job(RunContext(job, install_settings, extras={"llm": _llm()}))
+    a = json.loads((job.dir / "approval.json").read_text(encoding="utf-8"))
+    assert any("'garage roof' matches no view" in d for d in a["ignored_directives"]), a["ignored_directives"]
+    assert any("every view in the standard set" in d for d in a["ignored_directives"])
+    assert len(a["plan"]["renders"]) > 2  # nothing was filtered out
+
+
+def test_replan_failure_is_plain_keeps_corrections_and_retry_resumes(env):
+    from render_agent.errors import PermanentError
+
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    real = env.llm.call_json
+
+    def fail_spec(stage, *args, **kw):
+        if "spec" in stage:
+            raise PermanentError(
+                code="LLM_REFUSED", what_happened="The reader refused the request.", what_to_do="Press Retry."
+            )
+        return real(stage, *args, **kw)
+
+    env.llm.call_json = fail_spec
+    r = env.post(
+        f"/api/jobs/{job_id}/approval/replan",
+        {"corrections": [{"fact": "Roof colour", "value": "Monument", "note": ""}]},
+    )
+    assert r.status_code == 200
+    env.drain()
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "FAILED" and job["can_retry"]
+    assert job["error"]["what_happened"] == "The reader refused the request."
+    assert "Traceback" not in json.dumps(job)
+    assert env.client.get(f"/api/jobs/{job_id}/approval").json()["corrections"][-1]["value"] == "Monument"
+
+    env.llm.call_json = real
+    env.post(f"/api/jobs/{job_id}/retry")
+    env.drain()
+    assert env.client.get(f"/api/jobs/{job_id}").json()["status"] == "AWAITING_APPROVAL"
+
+
+def test_instruction_file_pre_ticks_choose_views_and_its_words_can_be_read(env):
+    env.auto_views = False
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    env.drop(pdf)
+    txt = env.folders.input / "Lot plan.txt"
+    txt.write_text(
+        "@views=Only external front and back elevation\nPlease include a night view.\n", encoding="utf-8"
+    )
+    old = time.time() - 3600
+    os.utime(txt, (old, old))
+    r = env.post("/api/inputs/start", {"name": "Lot plan", "options": {}})
+    assert r.status_code == 200, r.json()
+    job_id = r.json()["job_id"]
+    env.drain()
+    v = env.client.get(f"/api/jobs/{job_id}/views").json()
+    assert v["from_file"]["present"] and v["from_file"]["views"] == ["Only external front and back elevation"]
+    assert v["from_file"]["text"] == "Please include a night view."
+    ticked = {x["id"] for x in v["views"] if x["ticked"]}
+    possible = {x["id"] for x in v["views"] if x["possible"]}
+    assert ticked == {"front_day", "rear_day", "front_night"} & possible
+    assert not any(x["interior"] for x in v["views"] if x["ticked"])
+
+
+def test_screen_only_job_has_no_instruction_file_and_ticks_the_standard_set(env):
+    env.auto_views = False
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf, dry_run=True)
+    env.drain()
+    v = env.client.get(f"/api/jobs/{job_id}/views").json()
+    assert not v["from_file"]["present"]  # start_options.txt is the app's, not an instruction file
+    assert any(x["ticked"] and x["interior"] for x in v["views"])
+    assert not next(x for x in v["views"] if x["id"] == "front_night")["ticked"]
+
+
+def test_blocked_view_can_be_rendered_anyway_but_not_one_missing_its_drawing(env):
+    pdf = make_pdf(env.install / "drop" / "Lot plan.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    jd = env.settings.path("jobs") / job_id
+    cl = json.loads((jd / "checklist.json").read_text(encoding="utf-8"))
+    contradicted, missing = cl["RENDER_REQUIREMENTS"][0], cl["RENDER_REQUIREMENTS"][1]
+    contradicted.update(
+        readiness="NOT READY", blockers=["Elevation shows three upper windows; the plan shows two."]
+    )
+    missing.update(readiness="NOT READY", blockers=["No elevation was found in the drawing set."])
+    (jd / "checklist.json").write_text(json.dumps(cl), encoding="utf-8")
+    val = json.loads((jd / "checklist_validation.json").read_text(encoding="utf-8"))
+    val["corrections"].append({"rule": "missing_drawing", "render_id": missing["render_id"], "detail": "x"})
+    (jd / "checklist_validation.json").write_text(json.dumps(val), encoding="utf-8")
+    a = json.loads((jd / "approval.json").read_text(encoding="utf-8"))
+    for r in a["plan"]["renders"]:
+        for src in (contradicted, missing):
+            if r["render_id"] == src["render_id"]:
+                r.update(readiness="NOT READY", blockers=src["blockers"])
+    (jd / "approval.json").write_text(json.dumps(a), encoding="utf-8")
+
+    rows = {
+        v["render_id"]: v
+        for vs in env.client.get(f"/api/jobs/{job_id}/approval").json()["dwellings"].values()
+        for v in vs
+    }
+    assert rows[contradicted["render_id"]]["can_render_anyway"]
+    assert rows[contradicted["render_id"]]["blockers"] == contradicted["blockers"]
+    assert not rows[missing["render_id"]]["can_render_anyway"]
+
+    choices = {n["key"]: "X" for n in env.client.get(f"/api/jobs/{job_id}/approval").json()["needs_choice"]}
+    env.provider.calls.clear()
+    r = env.post(
+        f"/api/jobs/{job_id}/approval",
+        {"choices": choices, "render_anyway": [contradicted["render_id"], missing["render_id"]]},
+    )
+    assert r.status_code == 200, r.json()
+    env.drain()
+    after = {
+        r["render_id"]: r for r in json.loads((jd / "checklist.json").read_text())["RENDER_REQUIREMENTS"]
+    }
+    assert after[contradicted["render_id"]]["readiness"] == "REVIEW"
+    assert after[contradicted["render_id"]]["blockers"]  # kept for the record
+    assert after[missing["render_id"]]["readiness"] == "NOT READY"
+    made = {c.render_id for c in env.provider.calls}
+    assert contradicted["render_id"] in made and missing["render_id"] not in made
+    assert json.loads((jd / "approval.json").read_text())["rendered_anyway"] == [contradicted["render_id"]]

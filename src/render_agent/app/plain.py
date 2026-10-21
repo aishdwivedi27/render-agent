@@ -11,6 +11,7 @@ STATUS_TEXT = {
     "QUEUED": "Waiting its turn",
     "RUNNING": "Working on it…",
     "RENDERING": "Making your renders…",
+    "AWAITING_VIEWS": "Choose the views",
     "AWAITING_APPROVAL": "Waiting for your approval",
     "AWAITING_REVIEW": "Ready for your review",
     "SUCCEEDED": "Finished",
@@ -23,6 +24,7 @@ STAGE_TEXT = {
     "s2_sheets": "Reading each sheet",
     "s3_evidence": "Collecting the facts",
     "s4_spec": "Writing the house specification",
+    "gate_views": "Waiting for you to choose the views",
     "s5_checklist": "Planning the views",
     "gate_approval": "Waiting for your approval",
     "s6_prompts": "Preparing each render",
@@ -31,8 +33,37 @@ STAGE_TEXT = {
     "s9_review": "Getting renders ready for review",
 }
 
+# the five steps the app shows, each with the pipeline stages that are its parts
+STEPS = [
+    ("Read the drawings", ["s1_ingest", "s2_sheets", "s3_evidence", "s4_spec"]),
+    ("Choose views", ["gate_views"]),
+    ("Approve the plan", ["s5_checklist", "gate_approval"]),
+    ("Make the renders", ["s6_prompts", "s7_render", "s8_check"]),
+    ("Review", ["s9_review"]),
+    ("Done", []),
+]
+
+
+def step_of(stage: str | None, status: str) -> dict[str, Any]:
+    """{step (1-5), step_name, steps, part, parts, part_name} for the job's current stage."""
+    n = len(STEPS) - 1 if status == "SUCCEEDED" or stage is None else 0
+    if n == 0:
+        n = next((i for i, (_, stages) in enumerate(STEPS) if stage in stages), 0)
+    name, stages = STEPS[n]
+    part = stages.index(stage) + 1 if stage in stages else 0
+    return {
+        "step": n + 1,
+        "step_name": name,
+        "steps": len(STEPS),
+        "part": part,
+        "parts": len(stages),
+        "part_name": STAGE_TEXT.get(stage or "", "") if part else "",
+    }
+
+
 # the screen the app shows for a job in each status
 SCREEN = {
+    "AWAITING_VIEWS": "views",
     "AWAITING_APPROVAL": "approval",
     "AWAITING_REVIEW": "review",
     "SUCCEEDED": "results",

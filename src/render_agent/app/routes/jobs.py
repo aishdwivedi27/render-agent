@@ -15,7 +15,9 @@ from render_agent.app.models import JobOut, JobSummary, OpenFolderIn, Problem, P
 from render_agent.app.routes import Ctx
 from render_agent.app.security import job_file, require_token
 from render_agent.app.worker import find_job_dir
+from render_agent.output.folders import names
 from render_agent.pipeline.job import STAGES, load_job
+from render_agent.validate.checklist_validator import load_view_set
 
 router = APIRouter()
 RETRYABLE = {"FAILED", "PAUSED"}
@@ -58,7 +60,7 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
     text = plain.status_text(status)
     if queued and queued > 0:
         text = plain.status_text("QUEUED")
-    elif queued == 0 and status not in ("AWAITING_APPROVAL", "AWAITING_REVIEW"):
+    elif queued == 0 and status not in ("AWAITING_VIEWS", "AWAITING_APPROVAL", "AWAITING_REVIEW"):
         text = plain.status_text("RUNNING")
     error = plain.error_of(job_dir) if status in RETRYABLE else None
     out = JobOut(
@@ -73,12 +75,15 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
         error=Problem(**error) if error else None,
         warnings=list(info.get("warnings") or []),
         updated=st.get("updated", ""),
+        output_folder=info.get("output"),
+        **plain.step_of(stage, status),
     )
     if full:
         out.progress = progress(job_dir, st)
-        out.output_folder = info.get("output")
         out.history_folder = info.get("history")
         out.publish_problem = info.get("publish_problem")
+        n = names(load_view_set(ctx.settings.path("knowledge")))
+        out.folders = {k: str(n[k]) for k in ("shared", "draft", "draft_final", "final")}
     return out
 
 

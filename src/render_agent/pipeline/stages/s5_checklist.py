@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
+from render_agent.pipeline import corrections as job_corrections
 from render_agent.pipeline.selections import (
     build_selections,
     colour_schedule_status,
@@ -30,6 +31,7 @@ from render_agent.validate.checklist_validator import (
     share_groups,
     validate,
 )
+from render_agent.validate.view_words import interpret
 
 if TYPE_CHECKING:
     from render_agent.pipeline.runner import RunContext
@@ -146,16 +148,24 @@ def run(ctx: RunContext) -> str:
             "SPEC": quote_block("HOUSE_SPECIFICATION", json.dumps(spec, indent=1, ensure_ascii=False)),
         },
     )
+    prompt += job_corrections.prompt_block(job.dir)  # designer corrections from approval: data
     raw = llm_for(ctx, STAGE).call_json(STAGE, prompt, [], load_schema(ctx, "checklist"), "checklist")
+    views_only, unplaced = interpret(", ".join(directives.views), view_set)
+    directives.ignored += [f"@views: '{p}' matches no view" for p in unplaced]
+    if directives.views and not views_only:
+        directives.ignored.append("@views matched no view, so every view in the standard set was planned")
+    requested = requested_views(instructions, view_set) | {
+        v["id"] for v in view_set["views"] if v.get("optional") and v["id"] in views_only
+    }
 
     opts = Options(
         dwellings=[d["dwelling_id"] for d in spec.get("DWELLINGS", []) if d.get("dwelling_id")],
         limit=limit,
-        requested=requested_views(instructions, view_set),
+        requested=requested,
         declined=declined_views(instructions, view_set),
         qualifying=qualifying_dwellings(spec, view_set),
         drawings_present={v["view_kind"] for v in catalog},
-        views_only=directives.views,
+        views_only=views_only,
         dwellings_only=directives.dwellings,
         documented=documented_fields(spec, view_set),
         project_number=str(spec.get("PROJECT", {}).get("project_number", "NOT FOUND")),

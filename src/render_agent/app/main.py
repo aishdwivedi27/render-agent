@@ -76,12 +76,12 @@ def make_context(
 
 
 def create_app(ctx: AppContext) -> FastAPI:
-    from render_agent.app.routes import approval, help, inputs, jobs, review, settings
+    from render_agent.app.routes import approval, help, inputs, jobs, review, settings, views
 
     app = FastAPI(title="Render Agent", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ctx = ctx
     app.add_middleware(LocalOnly, allowed=ctx.allowed_hosts)
-    for module in (inputs, jobs, approval, review, settings, help):
+    for module in (inputs, jobs, views, approval, review, settings, help):
         app.include_router(module.router, prefix="/api")
 
     @app.exception_handler(AgentError)
