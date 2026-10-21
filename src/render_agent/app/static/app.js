@@ -4,7 +4,7 @@
 const TOKEN = document.querySelector('meta[name="session-token"]').content;
 const view = document.getElementById("view");
 let pollTimer = null;
-let state = { selected: null, flagOpen: null, draftCorrections: [] };
+let state = { selected: null, flagOpen: null, draftCorrections: [], viewLabels: {}, meanings: {} };
 
 // ---------- helpers ----------
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -36,19 +36,27 @@ function problem(p, extra = "") {
 }
 
 // The job's one fixed sequence. `now` is the index of the current step; `attention` marks a stop.
-const STEPS = ["Start", "Approve the plan", "Make the renders", "Review", "Done"];
-function steps(now, attention = false) {
+const STEPS = ["Read the drawings", "Choose views", "Approve the plan", "Make the renders", "Review", "Done"];
+// `job` (optional) adds "part 3 of 5" under the step that is running.
+function steps(now, attention = false, job = null) {
+  const part = job && job.parts > 1 && job.part && job.step - 1 === now ? `<small class="part">part ${job.part} of ${job.parts}</small>` : "";
   return `<ol class="steps" aria-label="Job steps">${STEPS.map((s, i) =>
-    `<li class="${i < now ? "done" : i === now ? "now" + (attention ? " attention" : "") : ""}" ${i === now ? 'aria-current="step"' : ""}><span></span>${esc(s)}</li>`).join("")}</ol>`;
+    `<li class="${i < now ? "done" : i === now ? "now" + (attention ? " attention" : "") : ""}" ${i === now ? 'aria-current="step"' : ""}><span></span>${esc(s)}${i === now ? part : ""}</li>`).join("")}</ol>`;
 }
 
-function head(title, lede, meta = [], step = null, attention = false) {
+function head(title, lede, meta = [], step = null, attention = false, job = null) {
   const m = meta.map((x) => `<span>${x}</span>`).join('<span class="sep"></span>');
-  return `<header class="head">${m ? `<div class="eyebrow">${m}</div>` : ""}<h1>${esc(title)}</h1>${lede ? `<p class="lede">${esc(lede)}</p>` : ""}${step !== null ? steps(step, attention) : ""}</header>`;
+  return `<header class="head">${m ? `<div class="eyebrow">${m}</div>` : ""}<h1>${esc(title)}</h1>${lede ? `<p class="lede">${esc(lede)}</p>` : ""}${step !== null ? steps(step, attention, job) : ""}</header>`;
+}
+
+// "Step 1 of 5: Start · part 3 of 5: Collecting the facts"
+function stepLine(job) {
+  const part = job.parts > 1 && job.part ? ` · part ${job.part} of ${job.parts}: ${job.part_name}` : "";
+  return `Step ${job.step} of ${job.steps}: ${job.step_name}${part}`;
 }
 
 function pill(status, text) {
-  const kind = { AWAITING_APPROVAL: "wait", AWAITING_REVIEW: "wait", FAILED: "bad", PAUSED: "bad", SUCCEEDED: "good", RUNNING: "run", RENDERING: "run", NEW: "run" }[status] || "";
+  const kind = { AWAITING_VIEWS: "wait", AWAITING_APPROVAL: "wait", AWAITING_REVIEW: "wait", FAILED: "bad", PAUSED: "bad", SUCCEEDED: "good", RUNNING: "run", RENDERING: "run", NEW: "run" }[status] || "";
   return `<span class="pill ${kind}">${esc(text)}</span>`;
 }
 
@@ -78,10 +86,11 @@ const PDF_ICON = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 4h17l
 
 async function homeScreen(keepMessage) {
   const [home, prefs] = await Promise.all([api("/home"), api("/settings")]);
+  state.viewLabels = Object.fromEntries(home.views.map((v) => [v.id, v.label]));
   if (state.selected && !home.inputs.some((i) => i.name === state.selected && i.startable)) state.selected = null;
   if (!state.selected) { const first = home.inputs.find((i) => i.startable); state.selected = first ? first.name : null; }
   const active = home.jobs.filter((j) => j.status !== "SUCCEEDED");
-  const needYou = home.jobs.filter((j) => ["AWAITING_APPROVAL", "AWAITING_REVIEW", "FAILED", "PAUSED"].includes(j.status)).length;
+  const needYou = home.jobs.filter((j) => ["AWAITING_VIEWS", "AWAITING_APPROVAL", "AWAITING_REVIEW", "FAILED", "PAUSED"].includes(j.status)).length;
 
   const warns = home.warnings.map((w) => `<div class="notice ${w.kind === "onedrive" ? "" : "bad"}"><p>${esc(w.text)}</p>${w.kind === "onedrive" ? '<div><button class="link" id="dismiss-od">Got it, don\'t show this again</button></div>' : w.kind === "key" ? '<div><a href="#/settings">Add the key</a></div>' : ""}</div>`).join("");
 
@@ -95,11 +104,12 @@ async function homeScreen(keepMessage) {
     ${home.inputs.length ? `<div class="items" role="radiogroup">${items}</div>` : `<div class="dz-empty">${PDF_ICON}<p><strong>Drag a PDF onto this window</strong></p><p class="muted">or put it in <span class="path">${esc(home.input_folder)}</span></p></div>`}
   </section>`;
 
-  const jobs = home.jobs.length
-    ? home.jobs.map((j) => `<div class="row selectable" data-job="${esc(j.id)}" tabindex="0">
-        <span><span class="name">${esc(j.input_name)}</span><br><span class="sub">${j.error ? esc(j.error.what_happened) : `Updated ${esc(j.updated.slice(0, 16).replace("T", " "))}`}</span></span>
-        <span class="end">${pill(j.status, j.status_text)}${j.can_retry ? `<button data-retry="${esc(j.id)}">Retry</button>` : ""}</span></div>`).join("")
-    : '<div class="empty">Jobs you start appear here.</div>';
+  const row = (j) => `<div class="row selectable" data-job="${esc(j.id)}" tabindex="0">
+        <span><span class="name">${esc(j.input_name)}</span><br><span class="sub">${j.error ? esc(j.error.what_happened) : j.status === "SUCCEEDED" ? `Finished ${esc(j.updated.slice(0, 16).replace("T", " "))}` : `${esc(stepLine(j))} · updated ${esc(j.updated.slice(11, 16))}`}</span></span>
+        <span class="end">${pill(j.status, j.status_text)}${j.can_retry ? `<button data-retry="${esc(j.id)}">Retry</button>` : ""}${j.status === "SUCCEEDED" && j.output_folder ? `<button data-open="${esc(j.id)}">Open folder</button>` : ""}</span></div>`;
+  const done = home.jobs.filter((j) => j.status === "SUCCEEDED");
+  const jobs = active.length ? active.map(row).join("") : '<div class="empty">Jobs you start appear here.</div>';
+  const completed = done.length ? `<details class="completed"><summary><h2>Completed <span class="muted" style="font-size:15px">· ${done.length}</span></h2></summary><p class="muted" style="margin-top:0">Their images are in Output\\Completed.</p><div class="list">${done.map(row).join("")}</div></details>` : "";
 
   const providers = home.providers.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
   const llms = home.llm_choices.map((c) => `<option value="${esc(c)}" ${c === prefs.llm_choice ? "selected" : ""}>${esc(c)}</option>`).join("");
@@ -109,17 +119,16 @@ async function homeScreen(keepMessage) {
     + warns + `<div id="msg">${keepMessage || ""}</div>` + zone
     + `<details class="options"><summary>Start options</summary><div class="panel"><div class="grid2">
         <div><label class="check"><input type="checkbox" id="o-dry"> Practice run: placeholder images, no cost</label>
-             <label class="check"><input type="checkbox" id="o-night"> Add a night view of the front</label>
              <label class="check"><input type="checkbox" id="o-street" checked> Include the streetscape (2 or more dwellings)</label></div>
         <div><label for="o-llm">Drawing reader</label><select id="o-llm"><option value="">Standard</option>${llms}</select>
              <label for="o-provider">Image service</label><select id="o-provider"><option value="">Standard</option>${providers}</select></div>
         <div><label for="o-dw">Only these dwellings</label><input type="text" id="o-dw" placeholder="All, or e.g. 1, 3"></div>
-        <div><label for="o-views">Only these views</label><input type="text" id="o-views" placeholder="All, or e.g. Front day, Kitchen"></div>
         <div><label for="o-max">Most images per dwelling</label><input type="number" id="o-max" min="1" max="16" placeholder="16"></div>
-      </div></div></details>
+      </div>
+      </div></details>
     <div class="actions"><button class="primary" id="start" ${state.selected && home.can_start ? "" : "disabled"}>${state.selected ? `Start “${esc(state.selected)}”` : "Start"}</button>
       ${!home.can_start ? '<span class="muted">Fix the message above to start.</span>' : !state.selected ? '<span class="muted">Add a drawing set first.</span>' : ""}</div>
-    <h2>Your jobs</h2><div class="list">${jobs}</div>`;
+    <h2>Your jobs</h2><div class="list">${jobs}</div>${completed}`;
 
   view.querySelectorAll("[data-input]").forEach((el) => {
     const pick = () => { if (el.getAttribute("aria-disabled")) return; state.selected = el.dataset.input; homeScreen(document.getElementById("msg").innerHTML); };
@@ -130,10 +139,14 @@ async function homeScreen(keepMessage) {
     el.onkeydown = (e) => { if (e.key === "Enter") location.hash = `#/job/${enc(el.dataset.job)}`; };
   });
   view.querySelectorAll("[data-retry]").forEach((b) => (b.onclick = async () => { await api(`/jobs/${enc(b.dataset.retry)}/retry`, {}); toast("Retrying: the job carries on from where it stopped."); homeScreen(); }));
+  view.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => api(`/jobs/${enc(b.dataset.open)}/open-folder`, { which: "output" }).catch((e) => toast(e.data.what_happened))));
   document.getElementById("refresh").onclick = () => homeScreen();
   const od = document.getElementById("dismiss-od");
   if (od) od.onclick = async () => { await api("/home/dismiss-onedrive", {}); homeScreen(); };
   document.getElementById("start").onclick = () => startSelected(false);
+  // the "started before" message survives the 5-second refresh; its button must keep working
+  const anyway = document.getElementById("anyway");
+  if (anyway) anyway.onclick = () => startSelected(true);
   poll(async () => { if (!document.querySelector("details.options[open]") && document.activeElement?.tagName !== "INPUT") homeScreen(document.getElementById("msg")?.innerHTML); }, 5000);
 }
 
@@ -141,13 +154,11 @@ function startOptions() {
   const list = (v) => v.split(",").map((s) => s.trim()).filter(Boolean);
   const max = parseInt(document.getElementById("o-max").value, 10);
   return {
-    night: document.getElementById("o-night").checked || null,
     streetscape: document.getElementById("o-street").checked ? null : false,
     dry_run: document.getElementById("o-dry").checked || null,
     llm: document.getElementById("o-llm").value || null,
     provider: document.getElementById("o-provider").value || null,
     dwellings: list(document.getElementById("o-dw").value),
-    views: list(document.getElementById("o-views").value),
     max_images: Number.isFinite(max) ? max : null,
   };
 }
@@ -175,16 +186,14 @@ async function jobScreen(id) {
   const meta = [esc(job.input_name), pill(job.status, job.status_text), `<span class="mono">${esc(job.id)}</span>`];
   const warn = (job.warnings || []).map((w) => `<div class="notice"><p>${esc(w)}</p></div>`).join("") + (job.publish_problem ? problem({ what_happened: job.publish_problem, what_to_do: "" }) : "");
   if (job.queued === null && (job.status === "FAILED" || job.status === "PAUSED")) return stoppedScreen(job, meta, warn);
+  if (job.queued === null && job.screen === "views") return viewsScreen(job, meta, warn);
   if (job.queued === null && job.screen === "approval") return approvalScreen(job, meta, warn);
   if (job.queued === null && job.screen === "review") return reviewScreen(job, meta, warn);
   if (job.queued === null && job.screen === "results") return resultsScreen(job, meta, warn);
   return progressScreen(job, meta, warn);
 }
 
-function stepOf(job) {
-  const at = { "Waiting for your approval": 1, "Preparing each render": 2, "Making the renders": 2, "Checking renders against the drawings": 2, "Getting renders ready for review": 3 };
-  return at[job.stage_text] ?? 0;
-}
+function stepOf(job) { return Math.max((job.step || 1) - 1, 0); }
 
 function stoppedScreen(job, meta, warn) {
   const paused = job.status === "PAUSED";
@@ -197,56 +206,186 @@ function stoppedScreen(job, meta, warn) {
 function progressScreen(job, meta, warn) {
   const p = job.progress || { done: 0, total: 1 };
   const pct = Math.round((100 * p.done) / Math.max(p.total, 1));
-  const afterApproval = stepOf(job) >= 1;
+  const afterApproval = stepOf(job) >= 3;
+  const planning = stepOf(job) === 2;
   const counting = job.stage_text === "Making the renders" || job.stage_text === "Checking renders against the drawings";
   const what = job.queued > 0 ? `Waiting its turn (${job.queued} ahead)`
-    : job.stage_text === "Waiting for your approval" ? "Starting the renders…" : job.stage_text || "Working on it…";
-  const detail = counting ? `${p.done} of ${p.total} renders` : afterApproval ? "Preparing each render from the drawings" : `Part ${Math.min(p.done + 1, 5)} of 5`;
-  view.innerHTML = head(afterApproval ? "Making your renders" : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, afterApproval ? 2 : 0)
+    : job.stage_text === "Waiting for your approval" ? "Starting the renders…" : stepLine(job);
+  const detail = counting ? `${p.done} of ${p.total} renders` : afterApproval ? "Preparing each render from the drawings" : planning ? "Planning the views you chose" : "Reading the drawings";
+  view.innerHTML = head(afterApproval ? "Making your renders" : planning ? "Planning your views" : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, stepOf(job), false, job)
     + warn + `<section class="panel progress"><p class="stage">${esc(what)}</p><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
     <p class="muted">${esc(detail)}</p></section>
     <div class="actions"><a href="#/home">Back to Home</a></div>`;
-  poll(async () => { const j = await api(`/jobs/${enc(job.id)}`); if (j.status !== job.status || j.queued !== job.queued || j.stage_text !== job.stage_text || (j.progress && j.progress.done !== p.done)) route(); });
+  poll(async () => { const j = await api(`/jobs/${enc(job.id)}`); if (j.status !== job.status || j.queued !== job.queued || j.stage_text !== job.stage_text || j.part !== job.part || (j.progress && j.progress.done !== p.done)) route(); });
+}
+
+// ---------- Choose views ----------
+async function viewsScreen(job, meta, warn) {
+  const r = await api(`/jobs/${enc(job.id)}/views`);
+  const rows = r.views.map((v) => {
+    const locked = v.required || !v.possible;
+    const note = v.required ? "always made" : !v.possible ? v.why_not : v.note;
+    return `<label class="check ${locked ? "locked" : ""}"><input type="checkbox" data-pick="${esc(v.id)}" data-interior="${v.interior ? 1 : 0}" ${v.ticked ? "checked" : ""} ${locked ? "disabled" : ""}> ${esc(v.label)}${note ? ` <span class="muted">· ${esc(note)}</span>` : ""}</label>`;
+  }).join("");
+  // an instruction .txt that came with the drawings: its @views pre-ticks the boxes; its words can be read in
+  const f = r.from_file || {};
+  const fileNote = f.present && (f.views.length || f.text) ? `<div class="notice"><strong>From the instruction file</strong>
+      ${f.views.length ? `<p style="margin:4px 0 0">Views asked for: <span class="mono">${esc(f.views.join(", "))}</span>. The ticks below are set from it; check them.</p>` : ""}
+      ${f.text ? `<p style="margin:4px 0 0;white-space:pre-line">${esc(f.text)}</p><div style="margin-top:8px"><button id="use-file">Read views from this text</button> <span class="muted">puts it in the words box below for you to confirm</span></div>` : ""}</div>` : "";
+  view.innerHTML = head("Choose the views", `The drawings are read (${r.dwellings.length} dwelling${r.dwellings.length > 1 ? "s" : ""}). Choose what to render; the agent then plans those views and shows you the plan to approve.`, meta, 1, false, job)
+    + warn + `<div id="msg"></div>${fileNote}
+    <section class="panel"><div class="actions" style="margin:0 0 8px"><button class="link" id="pick-all">All views</button><button class="link" id="pick-ext">External only</button><button class="link" id="pick-int">Interior only</button><button class="link" id="pick-none">Clear</button></div>
+      <div class="viewlist">${rows}</div>
+      <label for="words" style="margin-top:16px">Or say it in your own words</label><input type="text" id="words" value="${esc(r.words)}" placeholder="e.g. only external front and back elevation, front at night">
+      <div id="understood"></div></section>
+    <h2>What the agent will do</h2><section class="panel" id="summary"></section>
+    <div class="sticky-actions"><div class="actions"><button class="primary" id="plan">Plan these views</button><a href="#/home">Back to Home</a></div></div>`;
+  const boxes = [...view.querySelectorAll("[data-pick]")];
+  const label = Object.fromEntries(r.views.map((v) => [v.id, v.label]));
+  const picked = () => boxes.filter((c) => c.checked).map((c) => c.dataset.pick);
+  const plan = document.getElementById("plan");
+  let wordsPending = false;
+  const summary = () => {
+    const ids = picked();
+    document.getElementById("summary").innerHTML = ids.length
+      ? `<p style="margin:0 0 6px">For ${r.dwellings.map(esc).join(", ")}, the agent will plan:</p><p style="margin:0"><strong>${ids.map((id) => esc(label[id])).join(" · ")}</strong></p>
+         <p class="muted" style="margin:8px 0 0">Interior views are planned only for rooms the floor plan shows. Next you see the plan, with each render and its materials, and approve it before anything is paid for.</p>`
+      : '<p class="muted" style="margin:0">Tick at least one view.</p>';
+    plan.disabled = !ids.length || wordsPending;
+    plan.textContent = wordsPending ? "Confirm your words first" : `Plan these ${ids.length} view${ids.length === 1 ? "" : "s"}`;
+  };
+  const setTo = (keep) => { boxes.forEach((c) => { if (!c.disabled) c.checked = keep(c); }); summary(); };
+  boxes.forEach((c) => (c.onchange = summary));
+  document.getElementById("pick-all").onclick = () => setTo(() => true);
+  document.getElementById("pick-ext").onclick = () => setTo((c) => c.dataset.interior === "0");
+  document.getElementById("pick-int").onclick = () => setTo((c) => c.dataset.interior === "1");
+  document.getElementById("pick-none").onclick = () => setTo(() => false);
+  const words = document.getElementById("words");
+  let typing;
+  const readWords = async () => {
+    const box = document.getElementById("understood");
+    wordsPending = false;
+    if (words.value.trim()) {
+      const res = await api("/views/interpret", { text: words.value });
+      const can = (id) => { const v = r.views.find((x) => x.id === id); return v && (v.possible || v.required); };
+      const usable = res.views.filter((v) => can(v.id));
+      const cannot = res.views.filter((v) => !can(v.id));
+      wordsPending = usable.length > 0;
+      box.innerHTML = `<div class="notice ${usable.length ? "" : "bad"}"><p style="margin:0">${usable.length ? `<strong>I understood:</strong> ${usable.map((v) => esc(v.label)).join(" · ")}` : "<strong>No view I can make matched these words.</strong>"}</p>
+        ${cannot.length ? `<p class="muted" style="margin:4px 0 0">Cannot be made from these drawings: ${cannot.map((v) => esc(v.label)).join(", ")}</p>` : ""}
+        ${res.unplaced.length ? `<p class="muted" style="margin:4px 0 0">Not understood: ${res.unplaced.map(esc).join(", ")}</p>` : ""}
+        ${usable.length ? '<div style="margin-top:8px"><button id="words-ok">Yes, use these views</button> <span class="muted">sets the ticks above; you can still change them</span></div>' : ""}</div>`;
+      const ok = document.getElementById("words-ok");
+      if (ok) ok.onclick = () => {
+        const ids = new Set(usable.map((v) => v.id));
+        wordsPending = false;
+        ok.replaceWith(Object.assign(document.createElement("span"), { className: "muted", textContent: "✓ Ticks set from your words" }));
+        setTo((c) => ids.has(c.dataset.pick));
+      };
+    } else box.innerHTML = "";
+    summary();
+  };
+  words.oninput = () => { clearTimeout(typing); typing = setTimeout(readWords, 400); };
+  const useFile = document.getElementById("use-file");
+  if (useFile) useFile.onclick = () => { words.value = f.text; readWords(); words.scrollIntoView({ behavior: "smooth", block: "center" }); };
+  if (words.value.trim()) await readWords(); else summary();
+  plan.onclick = async () => {
+    plan.disabled = true; plan.textContent = "Planning…";
+    try { await api(`/jobs/${enc(job.id)}/views`, { views: picked(), words: words.value.trim() }); route(); }
+    catch (e) { summary(); document.getElementById("msg").innerHTML = problem(e.data); }
+  };
 }
 
 // ---------- Approval ----------
 async function approvalScreen(job, meta, warn) {
   const a = await api(`/jobs/${enc(job.id)}/approval`);
+  if (!Object.keys(state.viewLabels).length) { const h = await api("/home"); state.viewLabels = Object.fromEntries(h.views.map((v) => [v.id, v.label])); }
   const need = a.materials.filter((m) => m.needs_choice).length;
   const dwellings = Object.entries(a.dwellings).map(([d, views]) => `<h2>${esc(d)} <span class="muted" style="font-size:15px">· ${views.filter((v) => v.ready).length} views</span></h2><div class="views">${views.map((v) => `<div class="view ${v.ready ? "" : "off"}"><strong>${esc(v.view)}</strong>${v.check ? " *" : ""}<small>${esc(v.where)}</small>${v.ready ? "" : `<small>Not made: ${esc(v.why_not)}</small>`}</div>`).join("")}</div>`).join("");
+  const made = Object.entries(a.dwellings).map(([d, views]) => [d, views.filter((v) => v.ready)]);
+  const madeList = made.map(([d, views]) => `<p style="margin:6px 0"><strong>${esc(d)}:</strong> ${views.length ? views.map((v) => esc(v.view) + (v.check ? " *" : "")).join(" · ") : '<span class="muted">nothing</span>'}</p>`).join("");
+  const blocked = Object.values(a.dwellings).flat().filter((v) => !v.ready);
+  // a blocked view: say what the drawings mean (re-plan) or have it rendered anyway (marked for a closer look)
+  const blockedList = blocked.length ? `<h3 style="margin:16px 0 4px">Blocked by the drawings</h3><p class="muted" style="margin:0 0 8px">The drawings disagree or are unclear for these views, so they are not made yet. Say what it actually means and apply it, or tick Render anyway.</p>
+    ${blocked.map((v) => `<div class="unsure"><p style="margin:0 0 4px"><strong>${esc(v.view)}</strong> <span class="muted">${esc(v.where)}</span></p>
+      <ul style="margin:0 0 6px">${v.blockers.map((b) => `<li>${esc(b)}</li>`).join("")}</ul>
+      <label for="blk-${esc(v.render_id)}">What it actually means</label><textarea id="blk-${esc(v.render_id)}" data-blk="${esc(v.render_id)}" rows="2" maxlength="500" placeholder="e.g. The elevation is right: three upper front windows; the first-floor plan is out of date">${esc(state.meanings["blk:" + v.render_id] || "")}</textarea>
+      ${v.can_render_anyway ? `<label class="check"><input type="checkbox" data-anyway="${esc(v.render_id)}"> Render anyway (marked for a closer look at review)</label>` : '<p class="muted" style="margin:6px 0 0">Cannot be rendered anyway: the drawing it needs is missing from the set.</p>'}</div>`).join("")}` : "";
   const materials = a.materials.map((m) => {
     const opts = m.options.map((o) => `<option value="${esc(o)}">`).join("");
     const drawn = m.from_drawings && m.from_drawings !== "NOT FOUND";
     return `<div class="material ${m.needs_choice ? "need" : ""}"><div><strong>${esc(m.label)}</strong><br><span class="muted">${drawn ? "From the drawings: " + esc(m.from_drawings) : "Not in the drawings"}</span></div>
       <div><input type="text" list="opt-${esc(m.key)}" data-mat="${esc(m.key)}" data-was="${esc(m.value)}" value="${esc(m.value)}" placeholder="${drawn ? "As drawn" : "Choose or type"}" aria-label="${esc(m.label)}" ${m.needs_choice ? "required" : ""}><datalist id="opt-${esc(m.key)}">${opts}</datalist></div></div>`;
   }).join("");
-  const unsure = a.uncertainties.length ? `<h2>The drawings disagree here</h2><div class="notice"><ul>${a.uncertainties.map((u) => `<li>${esc(u)}</li>`).join("")}</ul><p class="muted">Both values are kept. Correct the fact below if you know which is right.</p></div>` : "";
+  const unsure = a.uncertainties.length ? `<h2>Unclear or disagreeing in the drawings</h2><p class="muted" style="margin-top:-6px">Both values are kept. If you know what it means, say so: the plan is made again with your answer before any render.</p>
+    <section class="panel">${a.uncertainties.map((u, i) => `<div class="unsure"><p style="margin:0 0 6px">${esc(u)}</p><label for="mean-${i}">What it actually means</label><textarea id="mean-${i}" data-mean="${i}" rows="2" maxlength="500" placeholder="e.g. The window on the garage wall is 1800 wide; the 1200 on sheet 3 is old">${esc(state.meanings[u] || "")}</textarea></div>`).join("")}</section>` : "";
   const ignored = a.ignored_directives.length ? `<div class="notice"><strong>These options were not used</strong>${a.ignored_directives.map((d) => `<p class="mono">${esc(d)}</p>`).join("")}</div>` : "";
+  const changed = a.changes ? `<div class="notice good" role="status"><strong>Revised plan</strong>${a.changes.length ? `<ul>${a.changes.map((c) => `<li>${esc(c)}</li>`).join("")}</ul>` : "<p>The plan came out the same.</p>"}${a.corrections.length ? `<p class="muted" style="margin:6px 0 0">Corrections for this job: ${a.corrections.map((c) => esc(`${c.fact.slice(0, 60)} → ${c.value}`)).join("; ")}</p>` : ""}</div>` : "";
   const dwPick = a.dwellings_available.length > 1 ? `<label for="dw" style="margin:0">Dwellings</label><input type="text" id="dw" value="all" placeholder="all, or e.g. 1, 3" style="max-width:180px">` : "";
   const corr = state.draftCorrections.map((c, i) => `<div class="grid2"><div><label>Fact</label><input type="text" data-cf="${i}" value="${esc(c.fact)}" placeholder="e.g. Roof pitch"></div><div><label>Correct value</label><input type="text" data-cv="${i}" value="${esc(c.value)}" placeholder="e.g. 25 degrees"></div></div>`).join("");
 
-  view.innerHTML = head("Waiting for your approval", "Check the views and materials. Nothing is rendered, and nothing is paid for, until you approve.", meta, 1)
-    + warn + `<div id="msg"></div>`
-    + `<section class="panel summary"><span class="count">${a.planned_images}</span><span><strong>images will be made</strong><br><span class="muted">${a.practice_run ? "Practice run: placeholder images, no cost." : "Each one is checked against the drawings."}${need ? ` ${need} material${need > 1 ? "s need" : " needs"} your choice first.` : ""}</span></span></section>`
-    + ignored + dwellings + `<p class="muted">* will be marked for a closer look: the drawings were unclear.</p>`
+  view.innerHTML = head("Waiting for your approval", "Check the views and materials. Nothing is rendered, and nothing is paid for, until you approve.", meta, 2)
+    + warn + `<div id="msg"></div>` + changed
+    + `<section class="panel summary"><span class="count">${a.planned_images}</span><span><strong>images will be made</strong><br><span class="muted">${a.practice_run ? "Practice run: placeholder images, no cost." : "Each one is checked against the drawings. Renders are drafts: approving one delivers that same image, without the DRAFT mark, at Full HD."}${need ? ` ${need} material${need > 1 ? "s need" : " needs"} your choice first.` : ""}</span></span></section>`
+    + ignored
+    + `<h2>These renders will be made</h2><section class="panel">${madeList}${blockedList}
+        <div class="actions" style="margin-top:12px"><button id="change-views">Change the views</button><span class="muted">Back to Choose views; the plan is made again after your new choice.</span></div></section>`
+    + dwellings + `<p class="muted">* will be marked for a closer look: the drawings were unclear.</p>`
     + `<h2>Materials and colours</h2>` + (materials ? `<section class="panel materials">${materials}</section>` : '<p class="muted">No material choices for this set.</p>')
     + unsure + `<h2>Correct a fact</h2><p class="muted" style="margin-top:-6px">Corrections apply to this job only.</p><div id="corr">${corr}</div><button class="link" id="add-corr">+ Add a correction</button>`
-    + `<div class="sticky-actions"><div class="actions"><button class="primary" id="approve">Approve and start rendering</button>${dwPick}</div></div>`;
+    + `<div class="sticky-actions"><div class="actions"><button id="replan" disabled>Apply and show the revised plan</button><button class="primary" id="approve">Approve these ${a.planned_images} renders</button>${dwPick}</div>
+       <p class="muted" style="margin:8px 0 0">Answered something above? Apply it first: the drawings are read again with your answers (a small reading cost, no images) and you see the revised plan.</p></div>`;
 
-  const sync = () => state.draftCorrections.forEach((c, i) => { c.fact = view.querySelector(`[data-cf="${i}"]`).value; c.value = view.querySelector(`[data-cv="${i}"]`).value; });
+  document.getElementById("change-views").onclick = async (e) => {
+    e.target.disabled = true;
+    try { await api(`/jobs/${enc(job.id)}/approval/choose-views`, {}); route(); }
+    catch (err) { e.target.disabled = false; document.getElementById("msg").innerHTML = problem(err.data); }
+  };
+
+  // --- meanings and corrections: re-plan with the LLM, then show what changed ---
+  const sync = () => {
+    state.draftCorrections.forEach((c, i) => { c.fact = view.querySelector(`[data-cf="${i}"]`).value; c.value = view.querySelector(`[data-cv="${i}"]`).value; });
+    view.querySelectorAll("[data-mean]").forEach((t) => (state.meanings[a.uncertainties[+t.dataset.mean]] = t.value));
+    view.querySelectorAll("[data-blk]").forEach((t) => (state.meanings["blk:" + t.dataset.blk] = t.value));
+  };
+  const anyway = () => [...view.querySelectorAll("[data-anyway]:checked")].map((c) => c.dataset.anyway);
+  const approveBtn = document.getElementById("approve");
+  const count = () => { const n = a.planned_images + anyway().length; approveBtn.textContent = `Approve these ${n} render${n === 1 ? "" : "s"}`; approveBtn.disabled = n === 0; };
+  view.querySelectorAll("[data-anyway]").forEach((c) => (c.onchange = count));
+  count();
+  const pending = () => [
+    ...a.uncertainties.filter((u) => (state.meanings[u] || "").trim()).map((u) => ({ fact: u.slice(0, 200), value: state.meanings[u].trim(), note: "" })),
+    ...blocked.filter((v) => (state.meanings["blk:" + v.render_id] || "").trim()).map((v) => ({ fact: `${v.view} (${v.render_id}): ${v.blockers.join("; ")}`.slice(0, 200), value: state.meanings["blk:" + v.render_id].trim(), note: "" })),
+    ...state.draftCorrections.filter((c) => c.fact.trim() && c.value.trim()),
+  ];
+  const replanBtn = document.getElementById("replan");
+  const watch = () => { sync(); replanBtn.disabled = !pending().length; };
+  view.querySelectorAll("[data-mean], [data-blk], [data-cf], [data-cv]").forEach((t) => (t.oninput = watch));
+  watch();
+  replanBtn.onclick = async () => {
+    sync();
+    replanBtn.disabled = true; replanBtn.textContent = "Applying…";
+    try {
+      const r = await api(`/jobs/${enc(job.id)}/approval/replan`, { corrections: pending() });
+      state.draftCorrections = []; state.meanings = {};
+      (r.warnings || []).forEach(toast);
+      route();
+    } catch (e) { replanBtn.disabled = false; replanBtn.textContent = "Apply and show the revised plan"; document.getElementById("msg").innerHTML = problem(e.data); window.scrollTo({ top: 0, behavior: "smooth" }); }
+  };
   document.getElementById("add-corr").onclick = () => { sync(); state.draftCorrections.push({ fact: "", value: "" }); approvalScreen(job, meta, warn); };
   document.getElementById("approve").onclick = async () => {
     sync();
+    if (pending().length && !confirm("You have answers that are not applied yet. Approve without re-planning? They will still be passed to every render.")) return;
     const choices = {};
     view.querySelectorAll("[data-mat]").forEach((i) => { if (i.value.trim() && i.value !== i.dataset.was) choices[i.dataset.mat] = i.value.trim(); });
-    const corrections = state.draftCorrections.filter((c) => c.fact.trim() && c.value.trim());
-    const btn = document.getElementById("approve"); btn.disabled = true; btn.textContent = "Approving…";
+    const corrections = pending();
+    const btn = document.getElementById("approve"); const label = btn.textContent; btn.disabled = true; btn.textContent = "Approving…";
     try {
-      const r = await api(`/jobs/${enc(job.id)}/approval`, { choices, corrections, dwellings: document.getElementById("dw")?.value || "all" });
-      state.draftCorrections = [];
+      const r = await api(`/jobs/${enc(job.id)}/approval`, { choices, corrections, render_anyway: anyway(), dwellings: document.getElementById("dw")?.value || "all" });
+      state.draftCorrections = []; state.meanings = {};
       (r.warnings || []).forEach(toast);
       route();
-    } catch (e) { btn.disabled = false; btn.textContent = "Approve and start rendering"; document.getElementById("msg").innerHTML = problem(e.data); window.scrollTo({ top: 0, behavior: "smooth" }); }
+    } catch (e) { btn.disabled = false; btn.textContent = label; count(); document.getElementById("msg").innerHTML = problem(e.data); window.scrollTo({ top: 0, behavior: "smooth" }); }
   };
 }
 
@@ -271,13 +410,13 @@ async function reviewScreen(job, meta, warn) {
           <label class="check"><input type="checkbox" id="rule"> Suggest this as a general rule</label>
           <div class="buttons"><button class="flag" id="send-flag">${c.status === "flagged" ? "Save feedback" : "Flag this render"}</button><button id="cancel-flag">Cancel</button></div></div>` : ""}
       </div></article>`).join("");
-  const label = flagged ? `Continue: redo ${flagged} flagged` : pending ? "Continue" : "Finish";
-  view.innerHTML = head("Ready for your review", "Approve the renders you are happy with. Flag the others with what to change: only flagged renders are made again.", meta, 3)
+  const label = flagged ? `Continue: redo ${flagged} flagged` : pending ? "Save and come back later" : "Finish";
+  view.innerHTML = head("Ready for your review", "Approve the renders you are happy with. Flag the others with what to change: only flagged renders are made again.", meta, 4)
     + warn + `<div id="msg"></div><div class="cards">${cards}</div>
     <div class="sticky-actions"><div class="actions"><button class="primary" id="continue">${label}</button>
       ${pending ? `<button class="link" id="approve-rest">Approve all ${pending} waiting</button>` : ""}
       <span class="tally"><span class="pill good">${approved} approved</span><span class="pill bad">${flagged} flagged</span><span class="pill">${pending} waiting</span></span></div>
-      <p class="muted" style="margin:10px 0 0;font-size:14px">* not fully checked against the drawings: look closely.</p></div>`;
+      <p class="muted" style="margin:10px 0 0;font-size:14px">Only flagged renders are made again; renders you leave waiting stay as they are. * not fully checked against the drawings: look closely.</p></div>`;
 
   view.querySelectorAll("[data-zoom]").forEach((b) => (b.onclick = () => showViewer(r.cards.find((c) => c.render_id === b.dataset.zoom), file)));
 
@@ -311,7 +450,7 @@ function showViewer(c, file) {
   v.innerHTML = `<div class="viewer-head"><div><strong>${esc(c.title)}</strong> <span class="muted">${esc(c.dwelling)} · version ${esc(c.version)}</span>
       ${c.practice ? '<span class="pill wait">Practice image</span>' : ""}</div><button id="viewer-close" autofocus>Close</button></div>
     <div class="viewer-body ${c.reference ? "" : "single"}">
-      <figure><img src="${file(c.image)}" alt="${esc(c.title)} render"><figcaption>Render (DRAFT until you approve it)</figcaption></figure>
+      <figure><img src="${file(c.image)}" alt="${esc(c.title)} render"><figcaption>${c.status === "approved" ? "Approved: delivered without the DRAFT mark at Full HD" : "Render (DRAFT until you approve it)"}</figcaption></figure>
       ${c.reference ? `<figure><img src="${file(c.reference)}" alt="Drawing for ${esc(c.title)}"><figcaption>The drawing it was made from</figcaption></figure>` : ""}
     </div>`;
   v.showModal();
@@ -320,10 +459,11 @@ function showViewer(c, file) {
 
 // ---------- Results ----------
 function resultsScreen(job, meta, warn) {
-  view.innerHTML = head("Finished", "Every render is approved. The final images are in the Output folder, filed by dwelling.", meta, 4)
+  const f = { shared: "Common", draft: "Draft", draft_final: "draft-final", final: "FINAL APPROVED", ...(job.folders || {}) };
+  view.innerHTML = head("Finished", "Every render is approved. The final images are in the Output folder, filed by dwelling.", meta, 5)
     + warn + `<section class="panel progress"><div class="done-mark" aria-hidden="true">✓</div>
-      <p style="margin:0 0 6px"><strong>Final images</strong> <span class="path">${esc(job.output_folder || "")}\\Final</span></p>
-      <p class="muted" style="margin:0">Every version with the DRAFT mark is in the Draft folder next to it, with report.html.</p></section>
+      <p style="margin:0 0 6px"><strong>Approved images</strong> are in each dwelling's <span class="path">${esc(f.final)}</span> folder (views shared by several dwellings also in <span class="path">${esc(f.shared)}</span>), under <span class="path">${esc(job.output_folder || "")}</span></p>
+      <p class="muted" style="margin:0">Every version with the DRAFT mark is in the <span class="path">${esc(f.draft)}</span> folder beside it; the approved one is also in <span class="path">${esc(f.draft)}\\${esc(f.draft_final)}</span>. report.html lists every render with tokens and estimated cost.</p></section>
     <div class="actions"><button class="primary" id="open-out">Open Output folder</button><button id="open-hist" ${job.history_folder ? "" : "disabled"}>Open History folder</button><a href="#/home">Back to Home</a></div>`;
   const open = (which) => api(`/jobs/${enc(job.id)}/open-folder`, { which }).catch((e) => toast(e.data.what_happened));
   document.getElementById("open-out").onclick = () => open("output");

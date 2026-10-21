@@ -29,3 +29,6 @@ htmlcov/
 
 # M5.5 comparison pages (contain private renders)
 runs/
+
+# screenshots of bugs from manual testing
+bug/

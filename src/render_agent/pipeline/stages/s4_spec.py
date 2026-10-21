@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any
 import jsonschema
 
 from render_agent.errors import PermanentError
+from render_agent.pipeline import corrections
 from render_agent.pipeline.stages._common import drawing_rules, ingest_info, llm_for, load_schema, read_json
 from render_agent.util.fs import atomic_write_json
 from render_agent.util.prompts import load_prompt, quote_block, render, user_instructions_block
@@ -87,6 +88,7 @@ def run(ctx: RunContext) -> str:
             "DRAWING_RULES": drawing_rules(ctx),
         },
     )
+    prompt += corrections.prompt_block(job.dir)  # designer corrections from approval: data
     full = load_schema(ctx, "house_spec")
     asked = {
         **full,

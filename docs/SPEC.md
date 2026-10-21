@@ -37,12 +37,20 @@ designer for review. Every image must show the building the drawings describe.
 
 Journey: put a PDF (+ optional `instructions.txt` / `selections.yaml`) into `Desktop\RenderAgent\Input`
 → press **Start** on the app's Home screen (options set there) → the original moves to `History` →
-agent reads the drawings, plans views from the standard view set, reads materials from the PDF →
-**approval gate (always on)**, Approval screen: designer confirms views and materials, fills gaps and
-corrects facts → render (Progress screen) → drawing check (one automatic regeneration on fail) →
+agent reads the drawings (stages 1–4) → **Choose views** screen (decision 21 Oct 2026): every
+standard view with whether these drawings can support it; the designer picks all, some (External
+only / Interior only / ticks) or says it in words, which the app shows as "I understood: …" to
+confirm, then sees "What the agent will do" and presses Plan; the choice becomes `@views` (exact ids,
+required views always added; `views_chosen.json`) → the agent plans those views and reads materials
+from the PDF (stage 5) → **approval gate (always on)**, Approval screen: designer sees the renders
+that will be made (and "Change the views" returns to Choose views and plans again), materials,
+fills gaps and corrects facts; answers to unclear or disagreeing items ("What it actually means") re-run stages 4–5
+with the corrections and show the revised plan with what changed before anything is rendered
+(decision 21 Oct 2026) → render (Progress screen, "Step N of 6 · part p of n": Read the drawings, Choose views, Approve the plan, Make the renders, Review, Done) → drawing check (one automatic regeneration on fail) →
 **thumbnail review**, Review screen: designer approves or flags individual renders with a category and
 a note; only flagged renders are regenerated → approved set in `Output\<input name>\<Dwelling N>\FINAL APPROVED`,
-filed by dwelling. A failed job shows its plain-English `error.json` text in the app, with a Retry button.
+filed by dwelling; a finished job's Output folder then moves to `Output\Completed\` and Home lists it
+under Completed. A failed job shows its plain-English `error.json` text in the app, with a Retry button.
 Developers can still drive every step from the CLI.
 
 ## 3. Functional requirements
@@ -122,6 +130,13 @@ elevation); panel and sash counts are styling and never split, review or block a
 show every documented window and door in position, and doors in their documented material and colour. Roof junctions between attached dwellings that the front/rear elevations do not fully
 show are REVIEW items, never blockers on their own. Renders are artist's impressions.
 
+**Blocked views at approval** (decision 21 Oct 2026): a view the plan marks NOT READY because the
+drawings disagree or are unclear shows its reasons with a "What it actually means" box (re-plans with
+the answer as a job correction) and a "Render anyway" tick: the view becomes REVIEW (marked for a
+closer look at review), its blockers are kept, and `approval.json` records it in `rendered_anyway`.
+Views blocked by code (a drawing type missing from the set, or a required view inserted by the
+validator) cannot be rendered anyway.
+
 **Draft overlay** (decision 13 Oct 2026): every render is shown and delivered with a visible "DRAFT"
 overlay until the designer approves it at review. The overlay-free copy is kept only inside the job
 folder (`output/clean/`), only for the latest version of each render (a replaced version's copy is
@@ -159,8 +174,9 @@ hashes in `manifest.json`. See `knowledge/README.md`.
 | 1 | Ingest | `pages/page-N.png` (DPI from config), `pages/page-N.txt`, `ingest.json` | PyMuPDF |
 | 2 | Sheet analysis | `sheets/sheet-N.json` (sheet type, north arrow angle, views with normalised bboxes, room layouts, findings) | Vision LLM, one call per page, image + text layer |
 | 3 | Evidence | `evidence.json` | LLM, `schemas/evidence.json` |
-| 4 | House spec | `house_specification.json` (ROOMS copied by code from the sheets) | LLM, `schemas/house_spec.json` |
-| 5 | Checklist + selections | `checklist.json`, `checklist_validation.json`, `selections.json` | LLM then deterministic validator |
+| 4 | House spec | `house_specification.json` (ROOMS copied by code from the sheets) | LLM, `schemas/house_spec.json`; `corrections.json` quoted as a data block when present |
+| 5 | Checklist + selections | `checklist.json`, `checklist_validation.json`, `selections.json` | LLM then deterministic validator; `corrections.json` quoted as data; a view-only re-plan from approval re-validates the saved `llm_checklist` with no LLM call |
+| Views | Choose views (app jobs; CLI jobs pass at once and use `@views` from their instruction file) | `views_chosen.json`, `@views` written into `ingest.json` and `input/start_options.txt` | Designer in the desktop app (Choose views screen) |
 | Gate | Approval (always on) | `approval.json`, `corrections.json` | Designer in the desktop app (Approval screen); developers: `APPROVE` file or CLI |
 | 6 | Prompts | `prompts/<render_id>.txt`, `references/<view_id>.png` | LLM scene text; code assembles |
 | 7 | Render | `output/<render_id>_vN.png` | gpt-image-2 (default) or MuAPI |
@@ -253,7 +269,7 @@ C:\Program Files\RenderAgent\       install root, read-only: program, knowledge/
 Desktop\RenderAgent\                 designer folders, created on first launch
   Input\          a PDF; a PDF + same-name .txt; or a sub-folder of PDFs + instructions.txt / selections.yaml
   History\<YYYY-MM-DD HHMM> - <input name>\   originals moved here on Start + started.txt
-  Output\<input name>\
+  Output\<input name>\   while the job runs; Output\Completed\<input name>\ once it is finished (21 Oct 2026)
                   Common\ and Dwelling N\   (output/folders.py; decision 20 Oct 2026)
                     Draft\             every render version with the DRAFT overlay (_v1, _v2 …, never overwritten)
                       draft-final\     the approved version, still with the overlay
@@ -280,6 +296,13 @@ Every Output and History file is written atomically (`util.fs.atomic_write_*`), 
 never leave a half-written file. The job's working state lives only in the working root: moving or
 deleting Output or History folders never breaks a job.
 
+**Completed** (decision 21 Oct 2026). When a job finishes, its Output folder moves to
+`Output\<designer.completed>\<input name>\` (default `Completed`; ` (2)`, ` (3)` on a name clash) and
+`state.json` records the new place. At app start, finished jobs (SUCCEEDED, or every render approved
+at review) and Output folders that hold FINAL APPROVED images and belong to no job in progress are
+moved there too. Home shows finished jobs in a separate Completed list. A failed move leaves the
+folder where it is with a plain warning and is tried again at the next start.
+
 **Retry.** A failed or flagged job is retried with a button that resumes the existing job; designers
 never re-drop files.
 
@@ -295,7 +318,7 @@ Each directive below is also an option on the Start step. Start options are writ
 | `@provider` | `@provider=muapi` | Image provider for this job (enabled providers only; any other is an invalid directive) |
 | `@llm` | `@llm=sonnet` | Language model for this job |
 | `@dwellings` | `@dwellings=DWELLING 1` | Only these dwellings |
-| `@views` | `@views=Front day,Rear day` | Only these view types |
+| `@views` | `@views=front_day,rear_day` or `@views=Only external front and back elevation` | Only these views (required views are always kept). View ids, labels and plain words all work: words are matched to `view_set.yaml` views by code (`validate/view_words.py`, no LLM); optional views named here count as requested; words that match no view are listed as ignored, and if nothing matches every view is planned. In the app the view choice is its own screen after the drawings are read (Choose views): ticks or words confirmed as "I understood: …" become `@views` with exactly the chosen ids; an `@views` line (and night words) in the instruction file pre-tick that screen, and its free text is shown with "Read views from this text" to confirm in the same way; with no instruction file the screen alone decides (decision 21 Oct 2026) |
 | `@max_images` | `@max_images=6` | Lowers the per-dwelling limit; cannot raise it |
 | `@select` | `@select entry_door=pivot, spotted gum` | Pre-sets a material selection (still shown at the gate) |
 | `@dry_run` | `@dry_run=true` | Mock provider throughout |
@@ -305,6 +328,7 @@ Statuses (amended 15 Oct 2026, M5), each shown in the app in plain words:
 | Status | App shows | Meaning |
 | --- | --- | --- |
 | RUNNING / RENDERING | Working on it… / Making your renders… (Waiting its turn while queued) | stages running |
+| AWAITING_VIEWS | Choose the views | drawings read; waiting for the view choice before planning |
 | AWAITING_APPROVAL | Waiting for your approval | approval gate |
 | AWAITING_REVIEW | Ready for your review | thumbnail review |
 | SUCCEEDED | Finished | every render approved |
@@ -339,6 +363,9 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | Prompts | Interior render with no matching room, no openings or fixtures read, or no wall to face | Previous behaviour (whole floor plan, no ROOM LAYOUT block); reason in `prompts/index.json` and the report |
 | Prompts | Room bbox invalid | Whole floor plan used instead of the room crop; noted in `prompts/index.json` |
 | Drawing check | Interior answer without `opening_walls` and `fixture_positions` | "Not checked", with the reason |
+| Planning | `@views` words match no view | Listed under "These options were not used"; matched words still apply; nothing matched → every view planned |
+| Approval | Re-plan with corrections fails (LLM error) | Stage error as usual: plain `error.json`, Retry resumes the re-plan; corrections stay in `corrections.json` |
+| Output | Moving a finished job to Output\Completed fails (file in use) | Job stays SUCCEEDED, folder left in place, plain warning on the job; retried at the next app start |
 | Planning | > 16 renders for a dwelling, or counts wrong | Validator corrects by priority; each correction logged |
 | Planning | Required front view missing | Validator inserts it as NOT READY with a blocker |
 | Rendering | Rate limit, timeout, 5xx, network | Backoff, 5 attempts; then that render fails, others continue |
@@ -373,7 +400,7 @@ Config (`config.yaml` in the working root; keys in Windows Credential Manager): 
 per stage; image provider/model; `images.enabled_providers` (first release: `openai` only; `muapi`
 stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, checked by
 `budget.py`); render image settings `images.openai.draft` (size, default 1536×864; quality `low | medium | high`, default `medium`; older files with `size`/`quality` set directly still load, and a `final` block is ignored; decision 20 Oct 2026); `pricing` (USD per 1M tokens per model id, for the token and cost report; empty = "price not set"); `images.delivery_size` (1920×1080: approved landscape renders are centre-cropped to that aspect and scaled locally with Lanczos to exactly this size, lossless sRGB PNG, no AI upscaler; drafts and job copies keep the generated size; portrait finals are delivered as generated in phase 1); `images.room_crop_margin` (0.04 of the page around a room's bbox in interior reference crops); `images.final_long_edge` is deprecated and ignored; references per render (3); planned renders per dwelling
-(≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`); render concurrency (2); approval gate
+(≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`) and `designer.completed` (`Completed`); render concurrency (2); approval gate
 (on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
 
 Security: keys are entered on the installer page or in Settings, validated with a no-cost
@@ -459,7 +486,7 @@ symbols (window V lines, door swing lines) never drawn; no party-wall detail req
 | 2 | UI | Desktop app: FastAPI + uvicorn on 127.0.0.1, free port at start-up, native pywebview (Edge WebView2) window; static HTML/CSS/JS, no Node build, no CDN. Browser mode later |
 | 3 | App and pipeline | FastAPI calls runner, gate, s9_review and output directly, never the CLI; background worker, one job rendering at a time, others queued; `state.json` is the single source of truth; UI polls or uses SSE; replaces `review/server.py` for designers with the same safety rules (localhost, per-session token on state-changing requests, files only from the job's folders); CLI stays for developers |
 | 4 | Paths | Program in `C:\Program Files\RenderAgent` (read-only: code, knowledge, prompts, schemas); working files in `%LOCALAPPDATA%\RenderAgent`; `config.py` resolves install and working roots separately; dev mode keeps the repo layout; no hard-coded drive letters or user names |
-| 5 | Designer folders | `Desktop\RenderAgent\Input`, `Output`, `History` (known-folder API); Start copies, verifies by sha256, moves originals to dated History with `started.txt`; Output has Common / Dwelling N with Draft, Draft/draft-final and FINAL APPROVED, and report.html; Retry button resumes; OneDrive warning; atomic writes (§8) |
+| 5 | Designer folders | `Desktop\RenderAgent\Input`, `Output`, `History` (known-folder API); Start copies, verifies by sha256, moves originals to dated History with `started.txt`; Output has Common / Dwelling N with Draft, Draft/draft-final and FINAL APPROVED, and report.html; finished jobs move to Output\Completed (21 Oct 2026); Retry button resumes; OneDrive warning; atomic writes (§8) |
 | 6 | API keys | Entered on the installer page and validated with a no-cost call; also checked at first run; organisation or individual keys; Windows Credential Manager via `keyring`; `.env` developer fallback; no job without a valid key per enabled provider; Settings replaces and re-tests; never in logs, UI responses or job files |
 | 7 | Bundled rules | Private `knowledge/` and `prompts/` bundled for in-house use; risk: extractable from the install; external distribution needs a different design |
 | 8 | Packaging | PyInstaller one-folder → Inno Setup → one `Setup.exe` on a USB pen drive; shortcuts, icon, uninstaller, upgrade over the top keeps config, keys, jobs and Desktop folders; WebView2 check/install; unsigned for now, code signing Phase 2 |

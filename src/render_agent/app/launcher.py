@@ -13,6 +13,7 @@ import time
 import urllib.request
 from pathlib import Path
 
+from render_agent.app import designer
 from render_agent.app.main import create_app, make_context
 from render_agent.app.security import new_token
 from render_agent.config import Settings
@@ -92,6 +93,8 @@ def _run(settings: Settings, browser: bool) -> int:
             break
         time.sleep(0.05)
     (settings.work_root / PORT_FILE).write_text(json.dumps({"port": port}), encoding="utf-8")
+    for moved in designer.migrate_completed(settings):
+        log.info("moved to Completed: %s", moved)
     ctx.worker.start()  # resumes queued and running jobs from state.json
     url = f"http://127.0.0.1:{port}/"
     log.info("app on %s", url)

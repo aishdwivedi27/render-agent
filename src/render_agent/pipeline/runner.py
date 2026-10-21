@@ -17,7 +17,7 @@ from typing import Any
 
 from render_agent.config import Settings
 from render_agent.errors import AgentError, InputError, PauseJobError
-from render_agent.pipeline import gate
+from render_agent.pipeline import gate, view_choice
 from render_agent.pipeline.job import Job
 
 log = logging.getLogger("render_agent.runner")
@@ -50,7 +50,7 @@ class RunResult:
 
 def stage_function(name: str) -> StageFn | None:
     """A stage module's `run(ctx)`; None while the stage is still a stub."""
-    if name == "gate_approval":
+    if name in ("gate_approval", "gate_views"):
         return None
     module = importlib.import_module(f"render_agent.pipeline.stages.{name}")
     fn = getattr(module, "run", None)
@@ -121,6 +121,12 @@ def _run_job(ctx: RunContext, stages: dict[str, StageFn | None] | None) -> RunRe
     job.state["dry_run"] = ctx.dry_run
     job.set_status("RUNNING")
     while (name := job.first_unfinished_stage()) is not None:
+        if name == "gate_views":
+            if view_choice.needs_choice(job) and not view_choice.is_chosen(job.dir):
+                job.set_status("AWAITING_VIEWS")
+                return RunResult("AWAITING_VIEWS", name, "Waiting for the designer to choose the views.")
+            job.mark_stage_done(name, view_choice.CHOSEN if view_choice.is_chosen(job.dir) else None)
+            continue
         if name == "gate_approval":
             try:
                 approved = gate.check_gate(job)

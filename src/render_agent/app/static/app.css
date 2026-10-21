@@ -63,7 +63,7 @@ main { padding: 36px 48px 120px; max-width: 1180px; width: 100%; margin: 0 auto;
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* the step strip: where this job is in its one fixed sequence */
-.steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 22px 0 6px; padding: 0; list-style: none; counter-reset: step; }
+.steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 22px 0 6px; padding: 0; list-style: none; counter-reset: step; }
 .steps li { position: relative; padding: 12px 0 0; font: 600 13.5px/1.25 var(--body); color: var(--graphite); counter-increment: step; }
 .steps li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; border-radius: 999px; background: var(--line); }
 .steps li span { display: block; font: 500 11px/1 var(--mono); letter-spacing: .06em; margin-bottom: 4px; }
@@ -271,3 +271,16 @@ body { background:
 :root[data-theme="dark"] button:not(.primary) { box-shadow: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button:not(.primary) { box-shadow: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+/* step parts, view choice, completed jobs, re-plan answers (21 Oct 2026) */
+.steps li .part { display: block; margin-top: 3px; font: 500 12px/1.2 var(--body); color: var(--survey); }
+.viewlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 2px 18px; margin-top: 10px; }
+.viewlist .check .muted { font-weight: 400; font-size: 13px; }
+details.completed { margin-top: 26px; }
+details.completed > summary { cursor: pointer; list-style: none; }
+details.completed > summary h2 { display: inline; }
+details.completed > summary::before { content: "▸ "; color: var(--graphite); }
+details.completed[open] > summary::before { content: "▾ "; }
+.notice.good { background: var(--approve-soft); border-color: var(--approve); }
+.unsure + .unsure { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.check.locked { opacity: .6; }

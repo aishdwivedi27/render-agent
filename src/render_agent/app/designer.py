@@ -9,6 +9,7 @@ state never depends on Output or History: moving or deleting them never breaks a
 from __future__ import annotations
 
 import getpass
+import json
 import logging
 import os
 import shutil
@@ -346,3 +347,91 @@ def publish(job: Job) -> str | None:
             "job. Close any program using that folder (or pause OneDrive), then press Retry."
         )
     return None
+
+
+# --- Completed -----------------------------------------------------------------------------------
+DONE_REVIEW = {"approved", "skipped"}
+
+
+def _finished(job: Job) -> bool:
+    """SUCCEEDED, or every render approved at review (a job finished from the CLI)."""
+    if job.state.get("status") == "SUCCEEDED":
+        return True
+    review = job.dir / "review.json"
+    if not review.is_file():
+        return False
+    try:
+        renders = json.loads(review.read_text(encoding="utf-8")).get("renders", {})
+    except ValueError:
+        return False
+    return bool(renders) and all(r.get("status") in DONE_REVIEW for r in renders.values())
+
+
+def _has_finals(folder: Path) -> bool:
+    return any(p.parent.name == "FINAL APPROVED" for p in folder.rglob("*.png"))
+
+
+def _move_to_completed(f: Folders, settings: Settings, src: Path) -> Path:
+    dest = _unique(f.output / settings.designer.completed / src.name, "{name} ({n})")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(src), str(dest))
+    return dest
+
+
+def complete(settings: Settings, job: Job) -> str | None:
+    """Moves a finished job's Output folder to Output / Completed / <name> and records the new place.
+    A failed move leaves everything where it is (the job never depends on Output). Returns a plain
+    problem, or None."""
+    info = job.state.get("designer") or {}
+    if not info.get("output") or not _finished(job):
+        return None
+    f = folders(settings)
+    src = Path(info["output"])
+    done_root = f.output / settings.designer.completed
+    if not src.is_dir() or src.parent == done_root:
+        return None
+    try:
+        dest = _move_to_completed(f, settings, src)
+    except OSError as exc:
+        log.warning("job %s: could not move %s to %s: %s", job.id, src, done_root, exc)
+        return (
+            f"The finished images are still in {src}: they could not be moved to "
+            f"{done_root} ({getattr(exc, 'strerror', None) or exc}). Close any program using them; "
+            "the move is tried again next time Render Agent opens."
+        )
+    info["output"] = str(dest)
+    job.save()
+    log.info("job %s: output moved to %s", job.id, dest)
+    return None
+
+
+def migrate_completed(settings: Settings) -> list[str]:
+    """Once at app start: finished jobs, and Output folders that already hold FINAL APPROVED images
+    and belong to no job still in progress, move to Output / Completed. Returns what moved."""
+    moved: list[str] = []
+    f = folders(settings)
+    in_progress: set[Path] = set()
+    jobs_dir = settings.path("jobs")
+    for state in sorted(jobs_dir.glob("*/state.json")) if jobs_dir.is_dir() else []:
+        try:
+            job = load_job(state.parent)
+        except Exception:  # an unreadable job never stops the others
+            continue
+        out = (job.state.get("designer") or {}).get("output")
+        if not out:
+            continue
+        if _finished(job):
+            if complete(settings, job) is None and (job.state.get("designer") or {}).get("output") != out:
+                moved.append(job.id)
+        else:
+            in_progress.add(Path(out))
+    done_root = f.output / settings.designer.completed
+    for folder in sorted(p for p in f.output.iterdir() if p.is_dir() and p != done_root):
+        if folder in in_progress or not _has_finals(folder):
+            continue
+        try:
+            _move_to_completed(f, settings, folder)
+            moved.append(folder.name)
+        except OSError as exc:
+            log.warning("could not move %s to %s: %s", folder, done_root, exc)
+    return moved

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -32,6 +32,13 @@ class JobSummary(BaseModel):
     error: Problem | None = None
     warnings: list[str] = Field(default_factory=list)
     updated: str = ""
+    step: int = 1  # 1-5: Start, Approve the plan, Make the renders, Review, Done
+    step_name: str = ""
+    steps: int = 5
+    part: int = 0  # part of the step that is running (0 when the step has no parts running)
+    parts: int = 0
+    part_name: str = ""
+    output_folder: str | None = None
 
 
 class Warning(BaseModel):
@@ -47,6 +54,7 @@ class HomeOut(BaseModel):
     providers: list[str]
     llm_choices: list[str]
     input_folder: str
+    views: list[dict[str, Any]] = Field(default_factory=list)  # view_set.yaml views, for the checklist
 
 
 class StartOptions(BaseModel):
@@ -80,9 +88,9 @@ class Progress(BaseModel):
 
 class JobOut(JobSummary):
     progress: Progress | None = None
-    output_folder: str | None = None
     history_folder: str | None = None
     publish_problem: str | None = None
+    folders: dict[str, str] | None = None  # Output sub-folder names (view_set.yaml output_folders)
 
 
 class Correction(BaseModel):
@@ -96,6 +104,20 @@ class ApproveIn(BaseModel):
     choices: dict[str, str] = Field(default_factory=dict)
     dwellings: str = "all"
     corrections: list[Correction] = Field(default_factory=list)
+    render_anyway: list[str] = Field(default_factory=list, max_length=50)  # blocked render ids to make
+
+
+class ChooseViewsIn(BaseModel):
+    views: list[str] = Field(default_factory=list, max_length=50)  # the exact views to plan
+    words: str = Field(default="", max_length=1000)  # the designer's own words, kept for the record
+
+
+class InterpretIn(BaseModel):
+    text: str = Field(default="", max_length=1000)
+
+
+class ReplanIn(BaseModel):
+    corrections: list[Correction] = Field(min_length=1, max_length=50)
 
 
 class DecideIn(BaseModel):

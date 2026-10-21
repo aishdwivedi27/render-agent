@@ -17,6 +17,7 @@ STAGES = [
     "s2_sheets",
     "s3_evidence",
     "s4_spec",
+    "gate_views",
     "s5_checklist",
     "gate_approval",
     "s6_prompts",
@@ -28,6 +29,7 @@ SUBDIRS = ["input", "pages", "sheets", "references", "prompts", "checks", "outpu
 JOB_STATUSES = {
     "NEW",
     "RUNNING",
+    "AWAITING_VIEWS",
     "AWAITING_APPROVAL",
     "RENDERING",
     "AWAITING_REVIEW",
@@ -84,6 +86,12 @@ class Job:
         st = self.stage(name)
         st.update(status="failed", finished=_now())
         self.state["errors"].append({**err.to_dict(), "stage": name, "time": _now()})
+        self.save()
+
+    def reset_stages(self, names: list[str]) -> None:
+        """Marks these stages to run again (a re-plan from the approval screen); keeps their files."""
+        for name in names:
+            self.stage(name).update(status="pending", finished=None)
         self.save()
 
     def first_unfinished_stage(self) -> str | None:
@@ -162,8 +170,14 @@ def load_job(job_dir: Path) -> Job:
             likely_cause="The file was edited by hand or the disk is damaged.",
             what_to_do="Restore state.json or start the job again.",
         ) from exc
-    for name in STAGES:  # stages added in a later version start as pending
-        state["stages"].setdefault(
-            name, {"status": "pending", "started": None, "finished": None, "artifact": None}
-        )
+    for i, name in enumerate(STAGES):  # stages added in a later version start as pending,
+        if name not in state["stages"]:  # or done when the stage after them already ran
+            after = state["stages"].get(STAGES[i + 1], {}) if i + 1 < len(STAGES) else {}
+            later_done = after.get("status") == "done"
+            state["stages"][name] = {
+                "status": "done" if later_done else "pending",
+                "started": None,
+                "finished": None,
+                "artifact": None,
+            }
     return Job(job_dir, state)

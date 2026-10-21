@@ -7,6 +7,9 @@ runs/<YYYY-MM-DD>/<fixture>/comparison.html with:
   3. each agent render beside the best-matching delivered render
   4. the drawing-check result per render
   5. designer review status, flags and notes
+The fixture's fixture.yaml says where its delivered renders came from (renders_source: designer or
+agent_approved); every target shows its source, and agent-approved targets that were not drawing-checked
+are flagged as weak.
 Missing job files show "not available"; the page never fails because a stage did not run.
 Delivered renders are evaluation targets only: they are copied next to the page for viewing and
 never go near the image pipeline. All text from the job (PDF text, notes) is HTML-escaped.
@@ -64,6 +67,68 @@ def delivered(fixture_dir: Path) -> list[Path]:
         if root.is_dir()
         else []
     )
+
+
+SOURCES = {"designer", "agent_approved"}
+CHECKS = {"passed", "not_checked"}
+
+
+def fixture_meta(fixture_dir: Path) -> dict[str, Any]:
+    """fixture.yaml: renders_source (designer | agent_approved; "unknown" when absent) and, for
+    agent_approved, a per-file drawing_check (passed | not_checked)."""
+    f = fixture_dir / "fixture.yaml"
+    data: dict[str, Any] = {}
+    if f.is_file():
+        try:
+            data = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            data = {}
+    return {
+        "renders_source": str(data.get("renders_source") or "unknown"),
+        "renders": data.get("renders") or {},
+        **{k: v for k, v in data.items() if k not in ("renders_source", "renders")},
+    }
+
+
+def meta_problems(fixture_dir: Path, meta: dict[str, Any]) -> list[str]:
+    """Rule breaks in fixture.yaml: unknown source; an agent-approved render with no recorded
+    drawing check, or an invalid one."""
+    src = meta["renders_source"]
+    if src not in SOURCES:
+        return [f"renders_source is {src!r}; expected one of {sorted(SOURCES)} in fixture.yaml"]
+    if src != "agent_approved":
+        return []
+    out = []
+    for img in delivered(fixture_dir):
+        check = (meta["renders"].get(img.name) or {}).get("drawing_check")
+        if check not in CHECKS:
+            out.append(f"{img.name}: agent-approved render needs drawing_check passed or not_checked")
+    return out
+
+
+def target_label(meta: dict[str, Any], target: Path) -> str:
+    """'designer', 'agent-approved' or 'agent-approved, NOT drawing-checked (weak target)'."""
+    src = meta["renders_source"]
+    if src != "agent_approved":
+        return src
+    check = (meta["renders"].get(target.name) or {}).get("drawing_check")
+    return "agent-approved" if check == "passed" else "agent-approved, NOT drawing-checked (weak target)"
+
+
+def _source_html(fixture_dir: Path, meta: dict[str, Any]) -> str:
+    src = meta["renders_source"]
+    text = {
+        "designer": "Delivered renders: designer (independent targets).",
+        "agent_approved": "Delivered renders: agent-approved (the agent's own renders, approved by the "
+        "owner). Matching them shows consistency with past approved output, not correctness; judge "
+        "placement against the plan and the answer key.",
+    }.get(src, "Delivered renders: source unknown (no fixture.yaml).")
+    cls = "ok" if src == "designer" else "warn"
+    problems = meta_problems(fixture_dir, meta)
+    extra = (
+        '<ul class="bad">' + "".join(f"<li>{escape(p)}</li>" for p in problems) + "</ul>" if problems else ""
+    )
+    return f'<p class="{cls}">{escape(text)}</p>' + extra
 
 
 def best_match(view: str, candidates: list[Path]) -> Path | None:
@@ -126,6 +191,7 @@ def build(fixture_dir: Path, job_dir: Path, out_dir: Path) -> Path:
     checks = (_json(job_dir / "checks" / "index.json") or {}).get("renders", {})
     review = (_json(job_dir / "review.json") or {}).get("renders", {})
     targets = delivered(fixture_dir)
+    meta = fixture_meta(fixture_dir)
 
     planned_rows, used = [], set()
     for p in prompts:
@@ -135,13 +201,13 @@ def build(fixture_dir: Path, job_dir: Path, out_dir: Path) -> Path:
             used.add(match)
         planned_rows.append(
             f"<tr><td>{escape(rid)}</td><td>{escape(view)}</td><td>{escape(p.get('readiness', ''))}</td>"
-            f"<td>{escape(match.relative_to(fixture_dir).as_posix()) if match else '—'}</td></tr>"
+            f"<td>{escape(match.relative_to(fixture_dir).as_posix()) if match else '—'}</td>"
+            f"<td>{escape(target_label(meta, match)) if match else '—'}</td></tr>"
         )
     unmatched = [t for t in targets if t not in used]
     views_html = (
-        "<table><tr><th>render</th><th>view</th><th>readiness</th><th>delivered match</th></tr>"
-        + "".join(planned_rows)
-        + "</table>"
+        "<table><tr><th>render</th><th>view</th><th>readiness</th><th>delivered match</th>"
+        "<th>target source</th></tr>" + "".join(planned_rows) + "</table>"
         if planned_rows
         else NA
     ) + (
@@ -170,7 +236,11 @@ def build(fixture_dir: Path, job_dir: Path, out_dir: Path) -> Path:
         )
         conf = c.get("confidence")
         agent_cap = f"agent v{len(versions)}" if agent_src else f"agent ({r.get('status', 'not rendered')})"
-        target_cap = f"delivered: {match.name}" if target_src and match else "no delivered match"
+        target_cap = (
+            f"delivered ({target_label(meta, match)}): {match.name}"
+            if target_src and match
+            else "no delivered match"
+        )
         cards.append(
             f'<section class="card"><h3>{escape(rid)} <small>{escape(p.get("view_type", ""))}</small></h3>'
             f'<div class="pair">{_figure(agent_src, agent_cap)}{_figure(target_src, target_cap)}' + "</div>"
@@ -188,6 +258,7 @@ def build(fixture_dir: Path, job_dir: Path, out_dir: Path) -> Path:
         fixture=escape(fixture_dir.name),
         job=escape(job_dir.name),
         today=date.today().isoformat(),
+        source=_source_html(fixture_dir, meta),
         grade=_grade_html(job_dir, fixture_dir),
         views=views_html,
         cards="".join(cards) or NA,
@@ -221,6 +292,7 @@ figcaption,small,.na {{ color:var(--muted); }}
 .bad {{ color:var(--bad); font-weight:600; }}
 </style></head><body>
 <h1>Fixture {fixture}</h1><p><small>job {job} · written {today}</small></p>
+{source}
 <h2>1. Extraction grade</h2>{grade}
 <h2>2. Planned vs delivered views</h2>{views}
 <h2>3–5. Renders, drawing check, designer review</h2>{cards}

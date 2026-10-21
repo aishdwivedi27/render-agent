@@ -3,16 +3,19 @@
 from __future__ import annotations
 
 import shutil
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile
 
 from render_agent.app import designer, keys
 from render_agent.app.main import AppContext
-from render_agent.app.models import HomeOut, InputItemOut, StartIn, StartOut, Warning
+from render_agent.app.models import HomeOut, InputItemOut, InterpretIn, StartIn, StartOut, Warning
 from render_agent.app.routes import Ctx
 from render_agent.app.routes.jobs import all_jobs
 from render_agent.app.security import require_token
 from render_agent.pipeline.job import load_job
+from render_agent.validate import view_words
+from render_agent.validate.checklist_validator import load_view_set
 
 router = APIRouter()
 ONEDRIVE_SEEN = "onedrive_warning_seen"
@@ -77,7 +80,17 @@ def home(ctx: Ctx) -> HomeOut:
         providers=keys.available_image_providers(s),
         llm_choices=sorted(s.llm.choices),
         input_folder=str(designer.folders(s).input),
+        views=view_words.describe(load_view_set(s.path("knowledge"))),
     )
+
+
+@router.post("/views/interpret")
+def interpret_views(body: InterpretIn, ctx: Ctx) -> dict[str, Any]:
+    """Plain words -> the views they name, for the designer to confirm. Deterministic, no cost."""
+    view_set = load_view_set(ctx.settings.path("knowledge"))
+    ids, unplaced = view_words.interpret(body.text, view_set)
+    labels = {v["id"]: v.get("label", v["id"]) for v in view_set["views"]}
+    return {"views": [{"id": i, "label": labels[i]} for i in ids], "unplaced": unplaced}
 
 
 @router.get("/inputs")

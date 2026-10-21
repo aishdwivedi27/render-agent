@@ -137,7 +137,8 @@ class ViewRules:
     def drop_outside_set(self, cl: dict[str, Any]) -> None:
         wanted = {_norm(v) for v in self.o.views_only}
         labels = {
-            v["id"]: {_norm(v["label"]), *(_norm(x) for x in v.get("view_types", []))} for v in self.views
+            v["id"]: {_norm(v["id"]), _norm(v["label"]), *(_norm(x) for x in v.get("view_types", []))}
+            for v in self.views
         }
         keep = []
         for r in cl["RENDER_REQUIREMENTS"]:
