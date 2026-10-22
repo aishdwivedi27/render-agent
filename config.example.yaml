@@ -78,6 +78,7 @@ designer:
   desktop: ""                 # empty: the Windows Desktop folder; set a path only for testing
   folder: RenderAgent         # Desktop\RenderAgent\{Input,Output,History}
   completed: Completed        # finished jobs move to Output\Completed\<name>
+  cancelled: Cancelled        # cancelled jobs move to Output\Cancelled\<name>
 
 # Prices for the token and cost report: USD per 1 million tokens, per model id. Check them against
 # the provider's pricing page; leave a value empty and tokens are shown with "price not set".

@@ -9,6 +9,7 @@ from typing import Any
 STATUS_TEXT = {
     "NEW": "Starting…",
     "QUEUED": "Waiting its turn",
+    "CANCELLING": "Cancelling…",
     "RUNNING": "Working on it…",
     "RENDERING": "Making your renders…",
     "AWAITING_VIEWS": "Choose the views",

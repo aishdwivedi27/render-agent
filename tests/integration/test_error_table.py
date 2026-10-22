@@ -75,6 +75,9 @@ ROWS: dict[tuple[str, str], list[str]] = {
     ("Output", r"Moving a finished job to Output\Completed fails (file in use)"): [
         "tests.unit.test_view_choice_and_completed::test_failed_move_leaves_everything_and_says_so"
     ],
+    ("System", "Cancel cannot move the originals back to Input (file in use)"): [
+        "tests.integration.test_m5_app::test_cancel_that_cannot_restore_the_drawing_keeps_the_job"
+    ],
     ("Planning", "Required front view missing"): [
         "tests.unit.test_checklist_validator::test_missing_front_inserted_not_ready_with_blocker"
     ],

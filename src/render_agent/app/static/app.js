@@ -106,7 +106,7 @@ async function homeScreen(keepMessage) {
 
   const row = (j) => `<div class="row selectable" data-job="${esc(j.id)}" tabindex="0">
         <span><span class="name">${esc(j.input_name)}</span><br><span class="sub">${j.error ? esc(j.error.what_happened) : j.status === "SUCCEEDED" ? `Finished ${esc(j.updated.slice(0, 16).replace("T", " "))}` : `${esc(stepLine(j))} · updated ${esc(j.updated.slice(11, 16))}`}</span></span>
-        <span class="end">${pill(j.status, j.status_text)}${j.can_retry ? `<button data-retry="${esc(j.id)}">Retry</button>` : ""}${j.status === "SUCCEEDED" && j.output_folder ? `<button data-open="${esc(j.id)}">Open folder</button>` : ""}</span></div>`;
+        <span class="end">${pill(j.status, j.status_text)}${j.can_retry ? `<button data-retry="${esc(j.id)}">Retry</button>` : ""}${j.can_cancel ? `<button data-cancel="${esc(j.id)}">Cancel</button>` : ""}${j.status === "SUCCEEDED" && j.output_folder ? `<button data-open="${esc(j.id)}">Open folder</button>` : ""}</span></div>`;
   const done = home.jobs.filter((j) => j.status === "SUCCEEDED");
   const jobs = active.length ? active.map(row).join("") : '<div class="empty">Jobs you start appear here.</div>';
   const completed = done.length ? `<details class="completed"><summary><h2>Completed <span class="muted" style="font-size:15px">· ${done.length}</span></h2></summary><p class="muted" style="margin-top:0">Their images are in Output\\Completed.</p><div class="list">${done.map(row).join("")}</div></details>` : "";
@@ -135,10 +135,11 @@ async function homeScreen(keepMessage) {
     el.onclick = pick; el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pick(); } };
   });
   view.querySelectorAll("[data-job]").forEach((el) => {
-    el.onclick = (e) => { if (!e.target.dataset.retry) location.hash = `#/job/${enc(el.dataset.job)}`; };
+    el.onclick = (e) => { if (!e.target.dataset.retry && !e.target.dataset.cancel) location.hash = `#/job/${enc(el.dataset.job)}`; };
     el.onkeydown = (e) => { if (e.key === "Enter") location.hash = `#/job/${enc(el.dataset.job)}`; };
   });
   view.querySelectorAll("[data-retry]").forEach((b) => (b.onclick = async () => { await api(`/jobs/${enc(b.dataset.retry)}/retry`, {}); toast("Retrying: the job carries on from where it stopped."); homeScreen(); }));
+  view.querySelectorAll("[data-cancel]").forEach((b) => (b.onclick = () => cancelJob(b.dataset.cancel)));
   view.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => api(`/jobs/${enc(b.dataset.open)}/open-folder`, { which: "output" }).catch((e) => toast(e.data.what_happened))));
   document.getElementById("refresh").onclick = () => homeScreen();
   const od = document.getElementById("dismiss-od");
@@ -193,14 +194,25 @@ async function jobScreen(id) {
   return progressScreen(job, meta, warn);
 }
 
+async function cancelJob(id) {
+  if (!confirm("Cancel this job? Its renders and Output folder are deleted, and the drawing goes back to Input.")) return;
+  try {
+    const r = await api(`/jobs/${enc(id)}/cancel`, {});
+    toast(r.cancelled === "pending" ? "Cancelling: the job stops after the current step." : "Job cancelled. The drawing is back in Input.");
+    (r.warnings || []).forEach((w) => toast(w));
+  } catch (e) { toast(e.data.what_happened + " " + (e.data.what_to_do || "")); }
+  location.hash = "#/home"; homeScreen();
+}
+
 function stepOf(job) { return Math.max((job.step || 1) - 1, 0); }
 
 function stoppedScreen(job, meta, warn) {
   const paused = job.status === "PAUSED";
   view.innerHTML = head(paused ? "Paused, needs your attention" : "Something went wrong", paused ? "Nothing is lost. Fix the problem below, then press Retry: the job carries on where it stopped." : "Read what happened below. Retry carries on from where it stopped.", meta, stepOf(job), true)
     + warn + problem(job.error || { what_happened: "The job stopped.", what_to_do: "Press Retry." })
-    + `<div class="actions"><button class="primary" id="retry">Retry</button><a href="#/home">Back to Home</a></div>`;
+    + `<div class="actions"><button class="primary" id="retry">Retry</button><button id="cancel-job">Cancel job</button><a href="#/home">Back to Home</a></div>`;
   document.getElementById("retry").onclick = async () => { await api(`/jobs/${enc(job.id)}/retry`, {}); route(); };
+  document.getElementById("cancel-job").onclick = () => cancelJob(job.id);
 }
 
 function progressScreen(job, meta, warn) {
@@ -215,7 +227,9 @@ function progressScreen(job, meta, warn) {
   view.innerHTML = head(afterApproval ? "Making your renders" : planning ? "Planning your views" : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, stepOf(job), false, job)
     + warn + `<section class="panel progress"><p class="stage">${esc(what)}</p><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
     <p class="muted">${esc(detail)}</p></section>
-    <div class="actions"><a href="#/home">Back to Home</a></div>`;
+    <div class="actions">${job.can_cancel ? '<button id="cancel-job">Cancel job</button>' : ""}<a href="#/home">Back to Home</a></div>`;
+  const cj = document.getElementById("cancel-job");
+  if (cj) cj.onclick = () => cancelJob(job.id);
   poll(async () => { const j = await api(`/jobs/${enc(job.id)}`); if (j.status !== job.status || j.queued !== job.queued || j.stage_text !== job.stage_text || j.part !== job.part || (j.progress && j.progress.done !== p.done)) route(); });
 }
 

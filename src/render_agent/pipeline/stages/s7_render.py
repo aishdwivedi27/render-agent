@@ -29,6 +29,7 @@ from render_agent.images.budget import Budget, allowances
 from render_agent.images.overlay import draft_overlay
 from render_agent.output.folders import home_folder, names
 from render_agent.pipeline import corrections
+from render_agent.pipeline.job import cancel_requested
 from render_agent.pipeline.stages._common import ingest_info, read_json
 from render_agent.util.directives import parse_directives
 from render_agent.util.fs import atomic_write_bytes, atomic_write_json, atomic_write_text, safe_name
@@ -230,7 +231,7 @@ def run(ctx: RunContext) -> str:
     pauses: list[PauseJobError] = []
 
     def one(render_id: str) -> None:
-        if pauses:
+        if pauses or cancel_requested(ctx.job.dir):  # cancel: stop after the renders in flight
             return
         try:
             r.render(render_id)

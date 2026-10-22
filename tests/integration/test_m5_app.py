@@ -858,3 +858,92 @@ def test_blocked_view_can_be_rendered_anyway_but_not_one_missing_its_drawing(env
     made = {c.render_id for c in env.provider.calls}
     assert contradicted["render_id"] in made and missing["render_id"] not in made
     assert json.loads((jd / "approval.json").read_text())["rendered_anyway"] == [contradicted["render_id"]]
+
+
+def _in_review(env: Env, name: str) -> tuple[str, Path, Path]:
+    pdf = make_pdf(env.install / "drop" / f"{name}.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    env.drain()
+    _approve(env, job_id)
+    env.drain()
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert job["status"] == "AWAITING_REVIEW" and job["can_cancel"]
+    return job_id, Path(job["output_folder"]), Path(job["history_folder"])
+
+
+def test_cancel_in_review_moves_output_to_cancelled_and_returns_the_drawing_to_input(env):
+    job_id, out, history = _in_review(env, "Cancel me")
+    assert out.is_dir() and history.is_dir()
+    assert env.client.post(f"/api/jobs/{job_id}/cancel").status_code in (401, 403)  # token needed
+    r = env.post(f"/api/jobs/{job_id}/cancel")
+    assert r.status_code == 200 and r.json()["cancelled"] is True
+    assert not (env.settings.path("jobs") / job_id).exists()
+    assert not out.exists() and not history.exists()
+    assert (env.folders.output / "Cancelled" / out.name).is_dir()
+    assert (env.folders.input / "Cancel me.pdf").is_file()
+    assert job_id not in [j["id"] for j in env.client.get("/api/home").json()["jobs"]]
+
+
+def test_cancel_job_without_output_moves_its_working_folder_to_cancelled(env):
+    job_id, out, _ = _in_review(env, "No output")
+    job_dir = env.settings.path("jobs") / job_id
+    state = json.loads((job_dir / "state.json").read_text(encoding="utf-8"))
+    state.pop("designer", None)  # as for a job started from the CLI
+    (job_dir / "state.json").write_text(json.dumps(state), encoding="utf-8")
+    assert env.post(f"/api/jobs/{job_id}/cancel").status_code == 200
+    assert not job_dir.exists()
+    assert (env.folders.output / "Cancelled" / job_id / "state.json").is_file()
+
+
+def test_cancel_keeps_a_same_named_file_in_input(env):
+    job_id, _, _ = _in_review(env, "Twice")
+    (env.folders.input / "Twice.pdf").write_bytes(b"newer copy")
+    assert env.post(f"/api/jobs/{job_id}/cancel").status_code == 200
+    assert (env.folders.input / "Twice.pdf").read_bytes() == b"newer copy"
+    assert (env.folders.input / "Twice (2).pdf").is_file()
+
+
+def test_cancel_queued_job_leaves_the_queue(env):
+    pdf = make_pdf(env.install / "drop" / "Queued.pdf", ["ELEVATIONS"])
+    job_id = _start(env, pdf)
+    assert env.ctx.worker.position(job_id) == 1
+    assert env.post(f"/api/jobs/{job_id}/cancel").json()["cancelled"] is True
+    assert env.ctx.worker.position(job_id) is None
+    assert not (env.settings.path("jobs") / job_id).exists()
+    assert (env.folders.input / "Queued.pdf").is_file()
+
+
+def test_cancel_running_job_stops_at_the_next_step_then_removes_it(env):
+    pdf = make_pdf(env.install / "drop" / "Running.pdf", ["ELEVATIONS", "FLOOR PLAN"])
+    job_id = _start(env, pdf)
+    with env.ctx.worker._cond:
+        env.ctx.worker._queue.remove(job_id)
+        env.ctx.worker.current = job_id  # the worker is busy with it
+    r = env.post(f"/api/jobs/{job_id}/cancel")
+    assert r.json()["cancelled"] == "pending"
+    job = env.client.get(f"/api/jobs/{job_id}").json()
+    assert job["status_text"] == "Cancelling…" and not job["can_cancel"]
+    env.ctx.worker.run_one(job_id)  # the runner sees the marker before its first stage
+    env.ctx.worker._done()
+    assert not (env.settings.path("jobs") / job_id).exists()
+    assert (env.folders.input / "Running.pdf").is_file()
+
+
+def test_cancel_that_cannot_restore_the_drawing_keeps_the_job(env, monkeypatch):
+    job_id, out, history = _in_review(env, "Locked")
+
+    def refuse(src, dest):
+        raise PermissionError(13, "The file is in use")
+
+    monkeypatch.setattr(designer.shutil, "move", refuse)
+    r = env.post(f"/api/jobs/{job_id}/cancel")
+    assert r.status_code == 409 and "not cancelled" in r.json()["what_happened"]
+    assert (env.settings.path("jobs") / job_id).is_dir() and out.is_dir()
+    assert (history / "Locked.pdf").is_file()
+
+
+def test_finished_job_cannot_be_cancelled(env):
+    job_id, _, _ = _in_review(env, "Done")
+    load_job(env.settings.path("jobs") / job_id).set_status("SUCCEEDED")
+    assert not env.client.get(f"/api/jobs/{job_id}").json()["can_cancel"]
+    assert env.post(f"/api/jobs/{job_id}/cancel").status_code == 409

@@ -435,3 +435,65 @@ def migrate_completed(settings: Settings) -> list[str]:
         except OSError as exc:
             log.warning("could not move %s to %s: %s", folder, done_root, exc)
     return moved
+
+
+def _free_name(folder: Path, name: str) -> Path:
+    """folder/name, or 'stem (2).ext' etc. when that name is taken (".selections.yaml" kept whole)."""
+    dest = folder / name
+    if not dest.exists():
+        return dest
+    side = next((s for s in SIDE_SUFFIXES if name.endswith(s)), "")
+    stem, ext = (name[: -len(side)], side) if side else (Path(name).stem, Path(name).suffix)
+    n = 2
+    while (dest := folder / f"{stem} ({n}){ext}").exists():
+        n += 1
+    return dest
+
+
+def cancel_job(settings: Settings, job: Job) -> list[str]:
+    """Removes a job; its originals go back from History to Input and its Output folder moves to
+    Output / Cancelled / <name>. A job with no Output folder (e.g. started from the CLI) moves its
+    working folder there instead, so a cancel never deletes renders.
+
+    The originals move first: if that fails the job is left as it was and InputError is raised, so
+    a drawing is never lost. Returns plain warnings for leftovers that could not be deleted.
+    """
+    info = job.state.get("designer") or {}
+    f = folders(settings)
+    history = Path(info["history"]) if info.get("history") else None
+    if history is not None and history.is_dir() and history.parent == f.history:
+        try:
+            for p in sorted(history.iterdir()):
+                if p.name != "started.txt":
+                    shutil.move(str(p), str(_free_name(f.input, p.name)))
+            shutil.rmtree(history)
+        except OSError as exc:
+            log.warning("job %s: could not move the originals back to Input: %s", job.id, exc)
+            raise InputError(
+                code="CANCEL_RESTORE_FAILED",
+                what_happened="The job was not cancelled: its drawing could not be moved back to Input.",
+                likely_cause=f"A file in {history} is open in another program ({exc}).",
+                what_to_do="Close any program using the drawing, then press Cancel again.",
+            ) from exc
+    warnings: list[str] = []
+    output = Path(info["output"]) if info.get("output") else None
+    cancelled_root = f.output / settings.designer.cancelled
+    has_output = (
+        output is not None and output.is_dir() and output.resolve().is_relative_to(f.output.resolve())
+    )
+    keep = output if has_output else job.dir
+    assert keep is not None
+    if keep.parent != cancelled_root:
+        try:
+            dest = _unique(cancelled_root / keep.name, "{name} ({n})")
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(keep), str(dest))
+            log.info("job %s cancelled; %s moved to %s", job.id, keep, dest)
+        except OSError as exc:
+            warnings.append(f"{keep} could not be moved to {cancelled_root} ({exc}); move it yourself.")
+    if has_output and job.dir.exists():
+        try:
+            shutil.rmtree(job.dir)
+        except OSError as exc:
+            warnings.append(f"Some working files could not be deleted ({exc}); they are cleaned up later.")
+    return warnings

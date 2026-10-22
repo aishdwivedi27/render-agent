@@ -306,6 +306,15 @@ folder where it is with a plain warning and is tried again at the next start.
 **Retry.** A failed or flagged job is retried with a button that resumes the existing job; designers
 never re-drop files.
 
+**Cancel** (22 Oct 2026). Any job that is not finished has a Cancel button (Home card, progress and
+stopped screens), with a confirm. Cancel moves the originals from the job's History folder back to
+Input (a name already taken in Input gets " (2)"), deletes `started.txt` and the History folder and the job's working folder, moves the job's Output
+folder (only if it is inside Output) to `Output\<designer.cancelled>\<input name>\` (default `Cancelled`;
+" (2)" on a name clash), and takes it off the queue. A job with no Output folder (started from the
+CLI) moves its working folder there instead; Cancel never deletes renders. The originals move first; if that fails nothing is deleted. A running job shows "Cancelling…",
+stops before its next stage or next render (renders already in flight finish), and is removed then.
+Finished jobs cannot be cancelled.
+
 **OneDrive.** If the Desktop is redirected to OneDrive, Home shows a one-time warning suggesting
 `Desktop\RenderAgent` be excluded from sync.
 
@@ -334,6 +343,7 @@ Statuses (amended 15 Oct 2026, M5), each shown in the app in plain words:
 | SUCCEEDED | Finished | every render approved |
 | PAUSED | Paused, needs your attention | key, credit or disk problem; nothing lost; Retry resumes |
 | FAILED | Something went wrong | error.json shown; Retry resumes the existing job |
+| (any, cancel pending) | Cancelling… | running job stops at its next step, then is removed; its Output folder moves to Output\Cancelled |
 
 ## 9. Error handling
 
@@ -388,6 +398,7 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | System | Second app instance | Single-instance lock: the second launch exits and brings the open window to the front |
 | System | Port in use | A free 127.0.0.1 port is chosen at start-up; if none can be bound, plain-English error and the app exits |
 | System | WebView2 runtime missing | Installer installs it; at launch, plain-English message saying how to install it |
+| System | Cancel cannot move the originals back to Input (file in use) | Nothing deleted; job stays as it was; app says "not cancelled", close the program and press Cancel again |
 | System | Output or History folder not writable | Job working state unaffected; app names the folder and what to do; delivery retried with Retry |
 | System | Desktop redirected to OneDrive | One-time warning on Home suggesting `Desktop\RenderAgent` be excluded from sync; all Output/History writes atomic |
 | System | Network down | Calls pause and retry; queued jobs wait |
@@ -400,7 +411,7 @@ Config (`config.yaml` in the working root; keys in Windows Credential Manager): 
 per stage; image provider/model; `images.enabled_providers` (first release: `openai` only; `muapi`
 stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, checked by
 `budget.py`); render image settings `images.openai.draft` (size, default 1536×864; quality `low | medium | high`, default `medium`; older files with `size`/`quality` set directly still load, and a `final` block is ignored; decision 20 Oct 2026); `pricing` (USD per 1M tokens per model id, for the token and cost report; empty = "price not set"); `images.delivery_size` (1920×1080: approved landscape renders are centre-cropped to that aspect and scaled locally with Lanczos to exactly this size, lossless sRGB PNG, no AI upscaler; drafts and job copies keep the generated size; portrait finals are delivered as generated in phase 1); `images.room_crop_margin` (0.04 of the page around a room's bbox in interior reference crops); `images.final_long_edge` is deprecated and ignored; references per render (3); planned renders per dwelling
-(≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`) and `designer.completed` (`Completed`); render concurrency (2); approval gate
+(≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`) and `designer.completed` (`Completed`) and `designer.cancelled` (`Cancelled`); render concurrency (2); approval gate
 (on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
 
 Security: keys are entered on the installer page or in Settings, validated with a no-cost

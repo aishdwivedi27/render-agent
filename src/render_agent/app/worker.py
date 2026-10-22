@@ -17,9 +17,9 @@ from typing import Any
 from render_agent.app import designer
 from render_agent.config import Settings
 from render_agent.errors import AgentError
-from render_agent.pipeline.job import load_job
+from render_agent.pipeline.job import CANCEL_FILE, cancel_requested, load_job
 from render_agent.pipeline.start import continue_job
-from render_agent.util.fs import atomic_write_json
+from render_agent.util.fs import atomic_write_json, atomic_write_text
 
 QUEUE_FILE = "queue.json"
 RESUME_ON_LAUNCH = {"NEW", "RUNNING", "RENDERING"}  # stopped mid-work (crash, reboot, app closed)
@@ -73,6 +73,18 @@ class JobWorker:
                 return 0
             return self._queue.index(job_id) + 1 if job_id in self._queue else None
 
+    def cancel(self, job_id: str, job_dir: Path) -> bool:
+        """True when the job can be removed now; False when it is running and stops at its next
+        step (run_one removes it then)."""
+        with self._cond:
+            if job_id == self.current:
+                atomic_write_text(job_dir / CANCEL_FILE, "cancel\n")
+                return False
+            if job_id in self._queue:
+                self._queue.remove(job_id)
+                self._save()
+            return True
+
     def resume_on_launch(self) -> list[str]:
         """Queues what was queued or running when the app last closed."""
         ids: list[str] = []
@@ -109,6 +121,13 @@ class JobWorker:
         except Exception:  # never let one job stop the worker
             log.exception("job %s: unexpected error", job_id)
         job_dir = find_job_dir(settings, job_id)
+        if job_dir is not None and cancel_requested(job_dir):
+            try:
+                designer.cancel_job(settings, load_job(job_dir))
+            except AgentError as err:  # originals could not go back: the job stays, marker removed
+                log.error("job %s: cancel failed: %s", job_id, err)
+                (job_dir / CANCEL_FILE).unlink(missing_ok=True)
+            return
         if job_dir is not None:
             job = load_job(job_dir)
             problem = designer.publish(job) or designer.complete(settings, job)

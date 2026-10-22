@@ -29,6 +29,7 @@ class JobSummary(BaseModel):
     screen: str
     queued: int | None = None
     can_retry: bool = False
+    can_cancel: bool = False
     error: Problem | None = None
     warnings: list[str] = Field(default_factory=list)
     updated: str = ""

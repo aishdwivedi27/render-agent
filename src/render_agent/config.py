@@ -183,6 +183,7 @@ class Designer(_Strict):
     desktop: str = ""  # empty: the Windows Desktop known folder; tests and odd setups override it
     folder: str = Field(default=APP_FOLDER, min_length=1)
     completed: str = Field(default="Completed", min_length=1)  # Output\<this> holds finished jobs
+    cancelled: str = Field(default="Cancelled", min_length=1)  # Output\<this> holds cancelled jobs
 
 
 class Notify(_Strict):

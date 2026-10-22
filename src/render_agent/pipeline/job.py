@@ -38,6 +38,11 @@ JOB_STATUSES = {
     "PAUSED",
 }
 STAGE_STATUSES = {"pending", "running", "done", "failed"}
+CANCEL_FILE = "cancel_requested"  # written by the app; the runner stops at the next step
+
+
+def cancel_requested(job_dir: Path) -> bool:
+    return (job_dir / CANCEL_FILE).is_file()
 
 
 def _now() -> str:

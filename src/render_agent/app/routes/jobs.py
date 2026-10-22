@@ -1,4 +1,4 @@
-"""Job list, one job's status, Retry, opening its folders and serving its images."""
+"""Job list, one job's status, Retry, Cancel, opening its folders and serving its images."""
 
 from __future__ import annotations
 
@@ -9,14 +9,15 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
-from render_agent.app import plain
+from render_agent.app import designer, plain
 from render_agent.app.main import AppContext
 from render_agent.app.models import JobOut, JobSummary, OpenFolderIn, Problem, Progress
 from render_agent.app.routes import Ctx
 from render_agent.app.security import job_file, require_token
 from render_agent.app.worker import find_job_dir
+from render_agent.errors import AgentError
 from render_agent.output.folders import names
-from render_agent.pipeline.job import STAGES, load_job
+from render_agent.pipeline.job import STAGES, cancel_requested, load_job
 from render_agent.validate.checklist_validator import load_view_set
 
 router = APIRouter()
@@ -58,7 +59,10 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
     queued = ctx.worker.position(job.id)
     info = st.get("designer") or {}
     text = plain.status_text(status)
-    if queued and queued > 0:
+    cancelling = cancel_requested(job_dir)
+    if cancelling:
+        text = plain.status_text("CANCELLING")
+    elif queued and queued > 0:
         text = plain.status_text("QUEUED")
     elif queued == 0 and status not in ("AWAITING_VIEWS", "AWAITING_APPROVAL", "AWAITING_REVIEW"):
         text = plain.status_text("RUNNING")
@@ -71,7 +75,8 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
         stage_text=plain.STAGE_TEXT.get(stage or "", "") if status not in ("SUCCEEDED",) else "",
         screen=plain.screen_for(status),
         queued=queued,
-        can_retry=status in RETRYABLE and queued is None,
+        can_retry=status in RETRYABLE and queued is None and not cancelling,
+        can_cancel=status != "SUCCEEDED" and not cancelling,
         error=Problem(**error) if error else None,
         warnings=list(info.get("warnings") or []),
         updated=st.get("updated", ""),
@@ -118,6 +123,29 @@ def retry(job_id: str, ctx: Ctx) -> JobOut:
     ctx.reload_settings()  # a key added in Settings since the job paused
     ctx.worker.enqueue(job_id)
     return summary(ctx, d, full=True)
+
+
+@router.post("/jobs/{job_id}/cancel", dependencies=[Depends(require_token)])
+def cancel(job_id: str, ctx: Ctx) -> dict[str, Any]:
+    """Removes the job, its renders and its Output folder; the drawing goes back to Input.
+    A running job stops after its current step and is removed then."""
+    d = job_dir_or_404(ctx, job_id)
+    job = load_job(d)
+    if job.state.get("status") == "SUCCEEDED":
+        raise HTTPException(
+            409,
+            {
+                "what_happened": "A finished job cannot be cancelled.",
+                "what_to_do": "Its images are in Output; delete them there if you do not need them.",
+            },
+        )
+    if not ctx.worker.cancel(job_id, d):
+        return {"cancelled": "pending", "warnings": []}
+    try:
+        warnings = designer.cancel_job(ctx.settings, job)
+    except AgentError as err:
+        raise HTTPException(409, plain.problem(err.what_happened, err.what_to_do)) from err
+    return {"cancelled": True, "warnings": warnings}
 
 
 @router.post("/jobs/{job_id}/open-folder", dependencies=[Depends(require_token)])
