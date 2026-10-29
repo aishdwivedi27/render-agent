@@ -60,19 +60,19 @@ def test_step_and_part_for_each_stage():
     assert plain.step_of("s3_evidence", "RUNNING") == {
         "step": 1,
         "step_name": "Read the drawings",
-        "steps": 6,
+        "steps": 7,
         "part": 3,
         "parts": 4,
         "part_name": "Collecting the facts",
     }
     assert plain.step_of("gate_views", "AWAITING_VIEWS")["step_name"] == "Choose views"
     plan = plain.step_of("s5_checklist", "RUNNING")
-    assert (plan["step"], plan["part"], plan["parts"]) == (3, 1, 2)
-    assert plain.step_of("gate_approval", "AWAITING_APPROVAL")["step"] == 3
+    assert (plan["step"], plan["part"], plan["parts"]) == (4, 1, 2)
+    assert plain.step_of("gate_approval", "AWAITING_APPROVAL")["step"] == 4
     s7 = plain.step_of("s7_render", "RUNNING")
-    assert (s7["step"], s7["part"], s7["parts"]) == (4, 2, 3)
-    assert plain.step_of("s9_review", "AWAITING_REVIEW")["step"] == 5
-    assert plain.step_of(None, "SUCCEEDED")["step"] == 6
+    assert (s7["step"], s7["part"], s7["parts"]) == (5, 2, 3)
+    assert plain.step_of("s9_review", "AWAITING_REVIEW")["step"] == 6
+    assert plain.step_of(None, "SUCCEEDED")["step"] == 7
 
 
 def _finished_job(settings, name: str, out: Path):

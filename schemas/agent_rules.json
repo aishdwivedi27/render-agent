@@ -1,0 +1,71 @@
+{
+  "type": "object",
+  "description": "memory/agent_rules.json: only approved rules are quoted into jobs, as data. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "pending",
+              "rejected"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "owner",
+              "flag"
+            ]
+          },
+          "created": {
+            "type": "string"
+          },
+          "decided": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "decided_by": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "origin_job": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "status",
+          "source",
+          "created",
+          "decided",
+          "decided_by",
+          "origin_job"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "rules"
+  ],
+  "additionalProperties": false
+}

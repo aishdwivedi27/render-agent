@@ -114,7 +114,7 @@ ROWS: dict[tuple[str, str], list[str]] = {
     ],
     ("Account", "Invalid or missing key at install or first run"): [
         "tests.integration.test_m5_app::test_missing_key_at_first_run_blocks_start",
-        "tests.integration.test_m5_app::test_settings_never_returns_a_key_and_hides_providers_not_enabled",
+        "tests.integration.test_m5_app::test_settings_never_returns_a_key_and_lists_only_configured_providers",
         DEFERRED + ": M6 installer key page",
     ],
     ("Account", "Provider enabled without a key"): [
@@ -160,6 +160,37 @@ ROWS: dict[tuple[str, str], list[str]] = {
         DEFERRED + ": notify.py (reminder toasts, phase 2)",
     ],
     ("Config", "Invalid config or unknown model ID"): ["tests.unit.test_config"],
+    ("Config", "`plans.readout_llm_default`, `renders.prompt_writers_default`"): [
+        "tests.unit.test_plan_visuals_foundations::test_unknown_model_name_is_a_plain_config_error"
+    ],
+    ("Config", "Wet-area tile colour outside"): [
+        "tests.unit.test_plan_visuals_foundations::test_wet_tile_outside_range_is_a_config_error_named_by_doctor"
+    ],
+    ("Memory", "`memory/agent_rules.json` unreadable"): [
+        "tests.unit.test_plan_visuals_foundations::test_unreadable_agent_memory_warns_and_continues"
+    ],
+    ("Output", "Disclaimer missing or contrast below"): [
+        "tests.unit.test_disclaimer::test_missing_or_faint_disclaimer_is_not_deliverable",
+        "tests.unit.test_disclaimer::test_unstamped_pdf_page_fails",
+        "tests.unit.test_p1_trace::test_overlay_that_cannot_carry_the_disclaimer_stops_plainly",
+        DEFERRED + ": wired into plan and render outputs at PV7 and PV13",
+    ],
+    ("Plan", "No floor plan page in the drawings"): [
+        "tests.integration.test_pv2_app::test_drawing_without_a_floor_plan_stops_with_a_plain_error"
+    ],
+    ("Plan", "No vector walls on a floor plan page"): [
+        "tests.integration.test_pv2_app::test_no_vector_walls_means_the_readout_model_traces_them"
+    ],
+    ("Plan", "Traced area differs from the drawing"): [
+        "tests.unit.test_p1_trace::test_area_rows_are_red_over_tolerance",
+        "tests.unit.test_p1_trace::test_compare_marks_differences_over_tolerance",
+    ],
+    ("Plan", "Both readout models chosen and one fails"): [
+        "tests.integration.test_pv2_app::test_both_models_one_fails_the_other_is_kept_and_read_again_retries_only_it"
+    ],
+    ("Plan", "A chosen readout model has no saved key"): [
+        "tests.unit.test_p1_trace::test_chosen_readout_model_without_a_key_pauses_naming_it"
+    ],
 }
 
 

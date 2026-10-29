@@ -1,0 +1,107 @@
+{
+  "type": "object",
+  "description": "plan/furniture.json: proposed furniture, each a visualisation choice, not in the drawings. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "properties": {
+    "dwelling": {
+      "type": "string"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "host_wall": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "position_mm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "rotation_deg": {
+            "type": "number"
+          },
+          "footprint_mm": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "asset_id": {
+            "type": "string"
+          },
+          "styles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "label": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "clash": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "room",
+          "type",
+          "host_wall",
+          "position_mm",
+          "rotation_deg",
+          "footprint_mm",
+          "asset_id",
+          "styles",
+          "label",
+          "confidence",
+          "clash",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "dwelling",
+    "models",
+    "items"
+  ],
+  "additionalProperties": false
+}

@@ -1,0 +1,68 @@
+# Redacted copy: structure only. The real file is private and not in this repository.
+rooms:
+  garage:
+    pieces:
+    - type: <redacted>
+      count_by: <redacted>
+    styles:
+    - <redacted>
+  family:
+    pieces:
+    - type: <redacted>
+  meals:
+    pieces:
+    - type: <redacted>
+      seats: <redacted>
+      note: <redacted>
+  kitchen:
+    pieces:
+    - type: <redacted>
+      count: <redacted>
+      note: <redacted>
+      only_if: <redacted>
+  lounge:
+    pieces:
+    - type: <redacted>
+      note: <redacted>
+  master_bedroom:
+    pieces:
+    - type: <redacted>
+      size: <redacted>
+  bedroom:
+    pieces:
+    - type: <redacted>
+      size: <redacted>
+  walk_in_robe:
+    pieces:
+    - type: <redacted>
+      note: <redacted>
+  robe:
+    pieces:
+    - type: <redacted>
+  pantry:
+    pieces:
+    - type: <redacted>
+  laundry:
+    pieces:
+    - type: <redacted>
+  bathroom:
+    pieces:
+    - type: <redacted>
+      only_if: <redacted>
+  ensuite:
+    pieces:
+    - type: <redacted>
+      only_if: <redacted>
+  alfresco:
+    pieces:
+    - type: <redacted>
+      seats: <redacted>
+  entry:
+    pieces:
+    - type: <redacted>
+conditions:
+  shower: <redacted>
+  bath: <redacted>
+  island: <redacted>
+  garage_bays: <redacted>
+label: <redacted>

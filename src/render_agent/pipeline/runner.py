@@ -17,7 +17,7 @@ from typing import Any
 
 from render_agent.config import Settings
 from render_agent.errors import AgentError, InputError, PauseJobError
-from render_agent.pipeline import gate, view_choice
+from render_agent.pipeline import gate, plan_start, view_choice
 from render_agent.pipeline.job import Job, cancel_requested
 
 log = logging.getLogger("render_agent.runner")
@@ -124,6 +124,19 @@ def _run_job(ctx: RunContext, stages: dict[str, StageFn | None] | None) -> RunRe
         if cancel_requested(job.dir):
             log.info("job %s: cancelled before stage %s", job.id, name)
             return RunResult("CANCELLED", name, "The designer cancelled this job.")
+        if name == "gate_plan_start":
+            if not plan_start.is_chosen(job.dir):
+                if plan_start.needs_choice(job):
+                    job.set_status("AWAITING_PLAN_START")
+                    return RunResult(
+                        "AWAITING_PLAN_START", name, "Waiting for the designer to start the plan check."
+                    )
+                plan_start.pass_without_screen(job, ctx.settings)
+            job.mark_stage_done(name, plan_start.CHOSEN)
+            continue
+        if name == "gate_plan_check":  # the floor plan questions (PV3) decide when it passes
+            job.set_status("AWAITING_PLAN_CHECK")
+            return RunResult("AWAITING_PLAN_CHECK", name, "Waiting for the designer to check the plan.")
         if name == "gate_views":
             if view_choice.needs_choice(job) and not view_choice.is_chosen(job.dir):
                 job.set_status("AWAITING_VIEWS")

@@ -1,0 +1,110 @@
+{
+  "type": "object",
+  "description": "plan/plan_lock.json: written when every plan file is approved. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "properties": {
+    "hashes": {
+      "type": "object",
+      "properties": {
+        "geometry": {
+          "type": "string"
+        },
+        "furniture": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "readout_approved": {
+          "type": "string"
+        },
+        "elevations_approved": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "inputs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sha256": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "sha256"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "geometry",
+        "furniture",
+        "readout_approved",
+        "elevations_approved",
+        "inputs"
+      ],
+      "additionalProperties": false
+    },
+    "styles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "plan_views": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "formats": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cutaway": {
+      "type": "object",
+      "properties": {
+        "elevation_deg": {
+          "type": "number"
+        },
+        "azimuth_deg": {
+          "type": "number"
+        },
+        "wall_cut_mm": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "elevation_deg",
+        "azimuth_deg",
+        "wall_cut_mm"
+      ],
+      "additionalProperties": false
+    },
+    "locked_at": {
+      "type": "string"
+    },
+    "designer": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "hashes",
+    "styles",
+    "plan_views",
+    "formats",
+    "cutaway",
+    "locked_at",
+    "designer"
+  ],
+  "additionalProperties": false
+}

@@ -63,7 +63,7 @@ main { padding: 36px 48px 120px; max-width: 1180px; width: 100%; margin: 0 auto;
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* the step strip: where this job is in its one fixed sequence */
-.steps { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 22px 0 6px; padding: 0; list-style: none; counter-reset: step; }
+.steps { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin: 22px 0 6px; padding: 0; list-style: none; counter-reset: step; }
 .steps li { position: relative; padding: 12px 0 0; font: 600 13.5px/1.25 var(--body); color: var(--graphite); counter-increment: step; }
 .steps li::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 5px; border-radius: 999px; background: var(--line); }
 .steps li span { display: block; font: 500 11px/1 var(--mono); letter-spacing: .06em; margin-bottom: 4px; }
@@ -284,3 +284,23 @@ details.completed[open] > summary::before { content: "▾ "; }
 .notice.good { background: var(--approve-soft); border-color: var(--approve); }
 .unsure + .unsure { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
 .check.locked { opacity: .6; }
+
+/* Check the plan */
+.tabs { display: flex; gap: 8px; margin: 0 0 14px; flex-wrap: wrap; }
+.tabs button[aria-selected="true"] { border-color: var(--survey); color: var(--survey); background: var(--survey-soft); }
+.method { margin: 0 0 10px; }
+.plan-check { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .plan-check { grid-template-columns: 1fr; } }
+.zoom { position: relative; overflow: hidden; padding: 0; }
+.zoom-tools { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; gap: 6px; }
+.zoom-tools button { padding: 7px 12px; }
+.zoom-view { height: 70vh; overflow: hidden; cursor: grab; touch-action: none; background: #fff; border-radius: var(--radius); }
+.zoom-view img { display: block; max-width: 100%; max-height: 100%; margin: 0 auto; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; }
+table.areas { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+table.areas th, table.areas td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--line); }
+table.areas tr.over td { color: var(--redline); background: var(--redline-soft); }
+ul.found { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; background: var(--line); }
+.dot.green { background: var(--approve); }
+.dot.orange { background: #E8590C; }
+.dot.red { background: var(--redline); }

@@ -1,0 +1,142 @@
+{
+  "type": "object",
+  "description": "plan/readout.json: floor plan readout with each model's own reading per row. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "properties": {
+    "dwelling": {
+      "type": "string"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "One readout row. Orange and Red rows carry a question; Green rows none (checked in code).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "readings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One model's independent reading of this row.",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "not_read"
+                  ]
+                },
+                "reading": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "GREEN",
+                    "ORANGE",
+                    "RED"
+                  ]
+                }
+              },
+              "required": [
+                "model",
+                "status",
+                "reading",
+                "confidence"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "reading": {
+            "type": "string"
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "item",
+          "category",
+          "readings",
+          "reading",
+          "alternative",
+          "evidence",
+          "confidence",
+          "question",
+          "answer"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "green": {
+          "type": "integer"
+        },
+        "orange": {
+          "type": "integer"
+        },
+        "red": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "green",
+        "orange",
+        "red"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "dwelling",
+    "models",
+    "rows",
+    "summary"
+  ],
+  "additionalProperties": false
+}

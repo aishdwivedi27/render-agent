@@ -1,0 +1,61 @@
+# Redacted copy: structure only. The real file is private and not in this repository.
+styles:
+  V1:
+    name: <redacted>
+    description: <redacted>
+    thumbnail: <redacted>
+    furnished: false
+    zoned_view: true
+    pdf: <redacted>
+    cutaway_look: <redacted>
+  V2A:
+    name: <redacted>
+    description: <redacted>
+    thumbnail: <redacted>
+    furnished: true
+    zoned_view: false
+    pdf: <redacted>
+    cutaway_look: <redacted>
+    garage_cars: false
+  V2B:
+    name: <redacted>
+    description: <redacted>
+    thumbnail: <redacted>
+    furnished: true
+    zoned_view: false
+    pdf: <redacted>
+    cutaway_look: <redacted>
+    garage_cars: true
+cutaway:
+  projection: <redacted>
+  elevation_deg: <redacted>
+  elevation_min_deg: <redacted>
+  elevation_max_deg: <redacted>
+  azimuth_deg: <redacted>
+  wall_cut_mm: <redacted>
+  windows: <redacted>
+  exterior_faces: <redacted>
+  hide:
+  - <redacted>
+  background: <redacted>
+  pdf: <redacted>
+exports:
+  formats:
+  - <redacted>
+  png_width_px: <redacted>
+  jpg_quality: <redacted>
+  jpg_background: <redacted>
+file_names:
+  plan: <redacted>
+  plan_zones: <redacted>
+  cutaway: <redacted>
+folders:
+  root: <redacted>
+  style: <redacted>
+  draft: <redacted>
+  final: <redacted>
+wet_tile:
+  colour: <redacted>
+  contrast_min: <redacted>
+  contrast_max: <redacted>
+  prompt_wording: <redacted>

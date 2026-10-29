@@ -6,12 +6,23 @@ import json
 from pathlib import Path
 from typing import Any
 
+from render_agent.pipeline.job import PLAN_STAGES
+
 STATUS_TEXT = {
     "NEW": "Starting…",
     "QUEUED": "Waiting its turn",
     "CANCELLING": "Cancelling…",
     "RUNNING": "Working on it…",
     "RENDERING": "Making your renders…",
+    "AWAITING_PLAN_START": "Start the plan check",
+    "AWAITING_PLAN_CHECK": "Check the plan",
+    "AWAITING_ELEVATION_CHOICE": "Do the elevation readout, or skip it?",
+    "AWAITING_ELEVATION_CHECK": "Check the elevations: questions for you",
+    "AWAITING_STYLES": "Choose plan styles",
+    "AWAITING_FURNISH_CHECK": "Check the furniture",
+    "AWAITING_PLAN_REVIEW": "Review the plans",
+    "AWAITING_CONTINUE": "Plans are ready",
+    "PLAN_COMPLETE": "Finished: plans only",
     "AWAITING_VIEWS": "Choose the views",
     "AWAITING_APPROVAL": "Waiting for your approval",
     "AWAITING_REVIEW": "Ready for your review",
@@ -25,6 +36,18 @@ STAGE_TEXT = {
     "s2_sheets": "Reading each sheet",
     "s3_evidence": "Collecting the facts",
     "s4_spec": "Writing the house specification",
+    "gate_plan_start": "Waiting for you to start the plan check",
+    "p1_trace": "Tracing the floor plan",
+    "gate_plan_check": "Waiting for your answers on the floor plan",
+    "gate_elevation_choice": "Waiting for you: elevation readout or skip",
+    "p1e_elevations": "Reading the elevations",
+    "gate_elevation_check": "Waiting for your answers on the elevations",
+    "gate_styles": "Waiting for you to choose plan styles",
+    "p2_furnish": "Proposing the furniture",
+    "gate_furnish_check": "Waiting for you to check the furniture",
+    "p3_plan_build": "Drawing the plans",
+    "gate_plan_review": "Waiting for you to review the plans",
+    "gate_continue": "Plans are ready: finish or choose renders",
     "gate_views": "Waiting for you to choose the views",
     "s5_checklist": "Planning the views",
     "gate_approval": "Waiting for your approval",
@@ -34,9 +57,10 @@ STAGE_TEXT = {
     "s9_review": "Getting renders ready for review",
 }
 
-# the five steps the app shows, each with the pipeline stages that are its parts
+# the steps the app shows, each with the pipeline stages that are its parts
 STEPS = [
     ("Read the drawings", ["s1_ingest", "s2_sheets", "s3_evidence", "s4_spec"]),
+    ("Plans", PLAN_STAGES),
     ("Choose views", ["gate_views"]),
     ("Approve the plan", ["s5_checklist", "gate_approval"]),
     ("Make the renders", ["s6_prompts", "s7_render", "s8_check"]),
@@ -62,8 +86,21 @@ def step_of(stage: str | None, status: str) -> dict[str, Any]:
     }
 
 
+# plan visuals screens not built yet: status -> the PV step that builds it (a placeholder until then)
+COMING_IN = {
+    "AWAITING_PLAN_CHECK": 3,  # the floor plan questions; PV2 shows the trace first (screen plan_check)
+    "AWAITING_ELEVATION_CHOICE": 4,
+    "AWAITING_ELEVATION_CHECK": 4,
+    "AWAITING_STYLES": 5,
+    "AWAITING_FURNISH_CHECK": 6,
+    "AWAITING_PLAN_REVIEW": 9,
+    "AWAITING_CONTINUE": 10,
+    "PLAN_COMPLETE": 10,
+}
+
 # the screen the app shows for a job in each status
 SCREEN = {
+    "AWAITING_PLAN_START": "plan_start",
     "AWAITING_VIEWS": "views",
     "AWAITING_APPROVAL": "approval",
     "AWAITING_REVIEW": "review",
@@ -76,7 +113,15 @@ def status_text(status: str) -> str:
 
 
 def screen_for(status: str) -> str:
+    if status in COMING_IN:
+        return "coming"
     return SCREEN.get(status, "progress")
+
+
+def coming_text(status: str) -> str:
+    """The placeholder line for a plan visuals screen that a later PV step builds."""
+    step = COMING_IN.get(status)
+    return f"This screen is coming in PV{step}." if step else ""
 
 
 def error_of(job_dir: Path) -> dict[str, str] | None:

@@ -25,6 +25,8 @@ class Directives:
     max_images: int | None = None
     select: dict[str, str] = field(default_factory=dict)
     dry_run: bool | None = None
+    readout_llm: str | None = None  # claude | openai | both (PLAN_VISUALS_SPEC section 2)
+    plans_mode: str | None = None  # plans | renders_only
     ignored: list[str] = field(default_factory=list)
 
 
@@ -66,6 +68,9 @@ def parse_directives(text: str) -> Directives:
         elif key in ("dwellings", "views"):
             ok = bool(_list(value))
             setattr(d, key, _list(value))
+        elif key in _CHOICES:
+            ok = value.lower() in _CHOICES[key]
+            setattr(d, key, value.lower() if ok else None)
         elif key == "max_images":
             ok = value.isdigit() and int(value) > 0
             d.max_images = int(value) if ok else None
@@ -76,7 +81,25 @@ def parse_directives(text: str) -> Directives:
     return d
 
 
-_KNOWN = {"night", "streetscape", "provider", "llm", "dwellings", "views", "max_images", "select", "dry_run"}
+_CHOICES = {"readout_llm": ("claude", "openai", "both"), "plans_mode": ("plans", "renders_only")}
+_KNOWN = {
+    "night",
+    "streetscape",
+    "provider",
+    "llm",
+    "dwellings",
+    "views",
+    "max_images",
+    "select",
+    "dry_run",
+    *_CHOICES,
+}
+
+
+def with_directive_line(text: str, key: str, line: str) -> str:
+    """`text` with its @<key> lines replaced by `line` ('' removes them)."""
+    kept = [ln for ln in text.splitlines() if not re.match(rf"\s*@{key}\b", ln, re.IGNORECASE)]
+    return "\n".join([*kept, *([line] if line else [])]) + "\n"
 
 
 def night_requested(text: str, request_words: list[str]) -> bool:

@@ -32,3 +32,9 @@ runs/
 
 # screenshots of bugs from manual testing
 bug/
+
+# plan visuals: project and agent memory (working data)
+memory/
+
+# plan visuals: step-by-step prompts for building PV0 to PV15 (working notes)
+docs/plan-visuals-steps.md

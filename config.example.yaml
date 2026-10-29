@@ -1,4 +1,4 @@
-# Copy to config.yaml. knowledge/prompts/schemas are relative to the install root (program folder);
+# Copy to config.yaml. knowledge/prompts/schemas/engine/assets are relative to the install root (program folder);
 # every other path is relative to the working root (dev mode: the repo; installed:
 # %LOCALAPPDATA%\RenderAgent, where the app creates config.yaml on first launch).
 paths:
@@ -8,8 +8,11 @@ paths:
   knowledge: private/knowledge
   prompts: private/prompts
   schemas: schemas
+  engine: private/engine      # plan visuals: plan.js, still.js, three.js, glTF models (install root)
+  assets: private/assets      # plan visuals: photo tops and ph_asset_index.json (install root)
   logs: logs
   feedback: feedback          # feedback.jsonl: every flag and correction, all jobs
+  memory: memory              # projects/<key>.json (project memory), agent_rules.json (agent memory)
 
 watcher:
   poll_seconds: 15
@@ -31,6 +34,7 @@ llm:
 images:
   provider: openai            # openai | muapi | mock
   enabled_providers: [openai] # offered in the app; muapi stays in the code (add it here to offer it)
+  offered_providers: [openai, muapi]  # plan visuals: listed on the approval screen, first = default
   openai:
     model: gpt-image-2        # or gpt-image-2.5-flare, gpt-image-2.5-sunburst
     # gpt-image-2 takes any WxH (multiples of 16). Portrait renders swap width and height.
@@ -46,6 +50,14 @@ images:
   concurrency: 2
   retries: 5
   max_images_per_round: null  # M5.5 refinement: cap on paid image calls per job run (null = off)
+
+plans:                        # plan visuals stage (docs/PLAN_VISUALS_SPEC.md); names from llm.choices
+  readout_llm_default: sonnet # floor plan, elevation and furniture readout: Claude by default
+  readout_estimate_tokens: {input: 30000, output: 6000}  # per floor-plan sheet, for the cost shown
+
+renders:
+  prompt_writers_default: [sonnet, gpt]  # both write a scene prompt; the designer picks one per view
+  check_llm_default: gpt                 # the drawing check model
 
 planning:
   max_planned_renders_per_dwelling: 16   # hard limit; see knowledge/view_set.yaml
@@ -85,3 +97,4 @@ designer:
 pricing:
   gpt-image-2: {input: null, output: null, image_input: null}
   gpt-5.6-sol: {input: null, output: null}
+  claude-sonnet-5-5: {input: null, output: null}

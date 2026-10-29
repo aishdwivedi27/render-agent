@@ -14,8 +14,20 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
-SCAN_DIRS = ["src", "private/prompts", "private/knowledge", "schemas", "redacted"]
+SCAN_DIRS = ["src", "private/prompts", "private/knowledge", "private/engine", "schemas", "redacted"]
 SKIP_PARTS = {"reference"}  # knowledge/reference holds the original chat-assistant files
+SKIP_ENGINE_PARTS = {"vendor"}  # third-party three.js, unchanged from upstream
+SUFFIXES = {".py", ".md", ".txt", ".yaml", ".yml", ".json", ".js"}
+
+
+def skipped(rel: Path) -> bool:
+    """Reference copies keep one project's data on purpose (engine/*_reference.*, knowledge/reference)."""
+    if SKIP_PARTS & set(rel.parts):
+        return True
+    in_engine = rel.parts[:2] == ("private", "engine")
+    return in_engine and ("_reference." in rel.name or bool(SKIP_ENGINE_PARTS & set(rel.parts)))
+
+
 GENERIC_WORDS = {
     "rd",
     "road",
@@ -62,9 +74,9 @@ def main() -> int:
     leaks: list[str] = []
     for d in SCAN_DIRS:
         for path in (ROOT / d).rglob("*"):
-            if not path.is_file() or SKIP_PARTS & set(path.relative_to(ROOT).parts):
+            if not path.is_file() or skipped(path.relative_to(ROOT)):
                 continue
-            if path.suffix.lower() not in {".py", ".md", ".txt", ".yaml", ".yml", ".json"}:
+            if path.suffix.lower() not in SUFFIXES:
                 continue
             for n, line in enumerate(path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
                 if pattern.search(line):

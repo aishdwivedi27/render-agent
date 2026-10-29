@@ -1,0 +1,396 @@
+{
+  "type": "object",
+  "properties": {
+    "dwellings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "As the drawing names it, e.g. DWELLING 1; one dwelling: its name or DWELLING 1"
+          },
+          "region": {
+            "type": "object",
+            "properties": {
+              "x0": {
+                "type": "number"
+              },
+              "y0": {
+                "type": "number"
+              },
+              "x1": {
+                "type": "number"
+              },
+              "y1": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "x0",
+              "y0",
+              "x1",
+              "y1"
+            ],
+            "additionalProperties": false
+          },
+          "mirror_of": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Id of a dwelling this one repeats or mirrors on this page, else null"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "region",
+          "mirror_of",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "walls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "exterior": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "outline",
+          "exterior"
+        ],
+        "additionalProperties": false,
+        "description": "Only when asked to trace walls (scanned page): one wall outline, vertex by vertex"
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Room name as labelled, upper case"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "name",
+          "outline",
+          "evidence",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hinged_door",
+              "cavity_slider",
+              "sliding_door",
+              "open_walkway",
+              "arch",
+              "garage_door",
+              "window"
+            ]
+          },
+          "at": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+          },
+          "width_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Window or door code as written, e.g. 15-18, else null"
+          },
+          "swing": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Which room the door swings into, else null"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "kind",
+          "at",
+          "width_mm",
+          "code",
+          "swing",
+          "rooms",
+          "evidence",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "robe",
+              "shower_recess",
+              "linen",
+              "nib",
+              "other"
+            ]
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "kind",
+          "room",
+          "outline",
+          "evidence",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "e.g. WC, BASIN, BATH, SHOWER, BENCH, ISLAND, SINK, LAUNDRY TUB"
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "type",
+          "room",
+          "outline",
+          "evidence",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clearance_zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "room",
+          "outline",
+          "evidence"
+        ],
+        "additionalProperties": false,
+        "description": "Diagonal-hatched square beside a WC: recorded only, never drawn"
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "dwellings",
+    "walls",
+    "rooms",
+    "openings",
+    "recesses",
+    "fixtures",
+    "clearance_zones",
+    "notes"
+  ],
+  "additionalProperties": false,
+  "description": "Floor plan readout from one floor plan page (PLAN_VISUALS_SPEC section 3). Coordinates are page fractions; code converts them to mm and snaps them to the traced walls. Missing facts are NOT FOUND or empty; nothing is invented."
+}

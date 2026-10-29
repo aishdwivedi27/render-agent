@@ -26,8 +26,7 @@ def _writable(folder: Path) -> bool:
         return False
 
 
-def doctor_checks(settings: Settings) -> list[tuple[str, str]]:
-    """(level, message) pairs; level is OK, WARN or FAIL."""
+def _base_checks(settings: Settings) -> list[tuple[str, str]]:
     results: list[tuple[str, str]] = []
     py_ok = sys.version_info[:2] >= MIN_PYTHON
     results.append(("OK" if py_ok else "FAIL", f"Python {platform.python_version()} (need 3.12+)"))
@@ -55,17 +54,32 @@ def doctor_checks(settings: Settings) -> list[tuple[str, str]]:
     return results
 
 
-def plain_checks(settings: Settings) -> list[dict[str, str]]:
-    """Doctor results for designers: OK / Check this / Problem, without hidden providers."""
+def doctor_checks(settings: Settings, browser: bool = True) -> list[tuple[str, str]]:
+    """(level, message) pairs; level is OK, WARN or FAIL. Plan visuals checks carry their fix."""
+    from render_agent.plan.health import plan_checks
+
+    results = _base_checks(settings)
+    for level, msg, fix in plan_checks(settings, browser=browser):
+        results.append((level, f"{msg}. Fix: {fix}" if fix else msg))
+    return results
+
+
+def plain_checks(settings: Settings, browser: bool = True) -> list[dict[str, str]]:
+    """Doctor results for designers: OK / Check this / Problem, without hidden providers. Plan visuals
+    checks carry a separate `fix` line."""
+    from render_agent.plan.health import plan_checks
+
     words = {"OK": "OK", "WARN": "Check this", "FAIL": "Problem"}
     out = []
-    for level, msg in doctor_checks(settings):
+    for level, msg in _base_checks(settings):
         name = msg.split()[0].lower()
         if name == "muapi" and "muapi" not in settings.images.enabled_providers:
             continue
         if name == "ffmpeg":
             continue  # phase 2 (video); nothing a designer can act on
         if name.endswith("_api_key"):
-            continue  # Settings shows keys; never echoed here
-        out.append({"level": words[level], "text": msg})
+            continue  # the key lines below say saved / not saved, never the key
+        out.append({"level": words[level], "text": msg, "fix": ""})
+    for level, msg, fix in plan_checks(settings, browser=browser):
+        out.append({"level": words[level], "text": msg, "fix": fix})
     return out

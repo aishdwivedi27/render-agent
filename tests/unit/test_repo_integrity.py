@@ -82,6 +82,12 @@ def test_prompt_placeholders_are_known():
         "SELECTIONS",
         "MAX_REFERENCES",
         "VISUALISATION_DEFAULTS",
+        # plan_trace.md
+        "SCALE",
+        "METHOD",
+        "RULES",
+        "RECESS_RULES",
+        "DWELLINGS",
         # drawing_check.md
         "RENDER_ID",
         "VIEW",

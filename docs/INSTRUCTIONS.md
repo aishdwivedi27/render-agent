@@ -99,6 +99,8 @@ Tips:
 | `@dwellings` | `@dwellings=DWELLING 1` | Only views that show these dwellings (a streetscape is not added automatically, but one already planned is kept because it shows them too) | All dwellings |
 | `@provider` | `@provider=muapi` | Image provider for this job: `openai`, `muapi` or `mock`, only if listed in `images.enabled_providers` (a provider not enabled is an invalid directive, listed at the gate) | `images.provider` in config.yaml (openai, gpt-image-2) |
 | `@llm` | `@llm=sonnet` | Language model for this whole job: a name from `llm.choices` in config.yaml (`gpt`, `sonnet`). An unknown name is ignored and listed at the gate | `llm` in config.yaml (gpt-5.6-sol) |
+| `@plans_mode` | `@plans_mode=renders_only` | `plans`: build plans first (Start the plan check). `renders_only`: "Exterior renders only (no plans)", today's path. In the app it pre-selects the Start the plan check screen; a CLI job uses it directly | App: the screen decides (plans selected). CLI: `renders_only` |
+| `@readout_llm` | `@readout_llm=both` | Which model reads the floor plan: `claude`, `openai` or `both` (both read separately; disagreements become questions; about double the reading cost). Pre-selects the Start the plan check screen | `plans.readout_llm_default` in config.yaml (Claude) |
 | `@dry_run` | `@dry_run=true` | Mock images, no drawing check, no spend | Real (paid) run after approval |
 
 True/false values accept `true/false`, `yes/no`, `on/off`, `1/0`.

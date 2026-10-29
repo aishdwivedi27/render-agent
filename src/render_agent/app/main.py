@@ -68,6 +68,12 @@ def make_context(
     extras: Callable[[], dict[str, Any]] | None = None,
     **kw: Any,
 ) -> AppContext:
+    from render_agent.memory import ensure_memory
+
+    try:
+        ensure_memory(settings)
+    except Exception:  # memory is optional: Help reports it, jobs run without it
+        logging.getLogger("render_agent.memory").warning("memory folder could not be prepared", exc_info=True)
     holder: dict[str, AppContext] = {}
     worker = JobWorker(lambda: holder["ctx"].settings, extras)
     ctx = AppContext(settings=settings, token=token, worker=worker, **kw)
@@ -76,12 +82,22 @@ def make_context(
 
 
 def create_app(ctx: AppContext) -> FastAPI:
-    from render_agent.app.routes import approval, help, inputs, jobs, review, settings, views
+    from render_agent.app.routes import (
+        approval,
+        help,
+        inputs,
+        jobs,
+        plan_check,
+        plan_start,
+        review,
+        settings,
+        views,
+    )
 
     app = FastAPI(title="Render Agent", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.ctx = ctx
     app.add_middleware(LocalOnly, allowed=ctx.allowed_hosts)
-    for module in (inputs, jobs, views, approval, review, settings, help):
+    for module in (inputs, jobs, plan_start, plan_check, views, approval, review, settings, help):
         app.include_router(module.router, prefix="/api")
 
     @app.exception_handler(AgentError)

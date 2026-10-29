@@ -17,6 +17,18 @@ STAGES = [
     "s2_sheets",
     "s3_evidence",
     "s4_spec",
+    "gate_plan_start",
+    "p1_trace",
+    "gate_plan_check",
+    "gate_elevation_choice",
+    "p1e_elevations",
+    "gate_elevation_check",
+    "gate_styles",
+    "p2_furnish",
+    "gate_furnish_check",
+    "p3_plan_build",
+    "gate_plan_review",
+    "gate_continue",
     "gate_views",
     "s5_checklist",
     "gate_approval",
@@ -25,10 +37,26 @@ STAGES = [
     "s8_check",
     "s9_review",
 ]
+# Plan visuals stages (docs/PLAN_VISUALS_SPEC.md section 1). Each PV step switches its stages on by
+# adding them to ENABLED_PLAN_STAGES; until then new jobs skip them.
+PLAN_STAGES = STAGES[STAGES.index("gate_plan_start") : STAGES.index("gate_views")]
+# PV1: Start the plan check. PV2: the trace and the read-only Check the plan screen.
+ENABLED_PLAN_STAGES: set[str] = {"gate_plan_start", "p1_trace", "gate_plan_check"}
+SKIP_NOT_ENABLED = "not enabled yet"
+SKIP_ADDED_LATER = "added after this job started"
 SUBDIRS = ["input", "pages", "sheets", "references", "prompts", "checks", "output"]
 JOB_STATUSES = {
     "NEW",
     "RUNNING",
+    "AWAITING_PLAN_START",
+    "AWAITING_PLAN_CHECK",
+    "AWAITING_ELEVATION_CHOICE",
+    "AWAITING_ELEVATION_CHECK",
+    "AWAITING_STYLES",
+    "AWAITING_FURNISH_CHECK",
+    "AWAITING_PLAN_REVIEW",
+    "AWAITING_CONTINUE",
+    "PLAN_COMPLETE",
     "AWAITING_VIEWS",
     "AWAITING_APPROVAL",
     "RENDERING",
@@ -37,7 +65,8 @@ JOB_STATUSES = {
     "FAILED",
     "PAUSED",
 }
-STAGE_STATUSES = {"pending", "running", "done", "failed"}
+STAGE_STATUSES = {"pending", "running", "done", "failed", "skipped"}
+FINISHED_STAGE_STATUSES = ("done", "skipped")
 CANCEL_FILE = "cancel_requested"  # written by the app; the runner stops at the next step
 
 
@@ -93,6 +122,11 @@ class Job:
         self.state["errors"].append({**err.to_dict(), "stage": name, "time": _now()})
         self.save()
 
+    def mark_stage_skipped(self, name: str, reason: str) -> None:
+        st = self.stage(name)
+        st.update(status="skipped", finished=_now(), reason=reason)
+        self.save()
+
     def reset_stages(self, names: list[str]) -> None:
         """Marks these stages to run again (a re-plan from the approval screen); keeps their files."""
         for name in names:
@@ -101,7 +135,7 @@ class Job:
 
     def first_unfinished_stage(self) -> str | None:
         for name in STAGES:
-            if self.state["stages"][name]["status"] != "done":
+            if self.state["stages"][name]["status"] not in FINISHED_STAGE_STATUSES:
                 return name
         return None
 
@@ -111,6 +145,16 @@ class Job:
         return path
 
 
+def _stage_entry(name: str) -> dict[str, Any]:
+    if name in PLAN_STAGES and name not in ENABLED_PLAN_STAGES:
+        return _skipped(SKIP_NOT_ENABLED)
+    return {"status": "pending", "started": None, "finished": None, "artifact": None}
+
+
+def _skipped(reason: str) -> dict[str, Any]:
+    return {"status": "skipped", "started": None, "finished": None, "artifact": None, "reason": reason}
+
+
 def _new_state(job_id: str, inputs: list[dict[str, str]]) -> dict[str, Any]:
     return {
         "job_id": job_id,
@@ -118,9 +162,7 @@ def _new_state(job_id: str, inputs: list[dict[str, str]]) -> dict[str, Any]:
         "created": _now(),
         "updated": _now(),
         "inputs": inputs,
-        "stages": {
-            n: {"status": "pending", "started": None, "finished": None, "artifact": None} for n in STAGES
-        },
+        "stages": {n: _stage_entry(n) for n in STAGES},
         "errors": [],
     }
 
@@ -177,6 +219,9 @@ def load_job(job_dir: Path) -> Job:
         ) from exc
     for i, name in enumerate(STAGES):  # stages added in a later version start as pending,
         if name not in state["stages"]:  # or done when the stage after them already ran
+            if name in PLAN_STAGES:  # the plan path never applies to a job started without it
+                state["stages"][name] = _skipped(SKIP_ADDED_LATER)
+                continue
             after = state["stages"].get(STAGES[i + 1], {}) if i + 1 < len(STAGES) else {}
             later_done = after.get("status") == "done"
             state["stages"][name] = {
@@ -185,4 +230,5 @@ def load_job(job_dir: Path) -> Job:
                 "finished": None,
                 "artifact": None,
             }
+    state["stages"] = {n: state["stages"][n] for n in STAGES}  # pipeline order
     return Job(job_dir, state)

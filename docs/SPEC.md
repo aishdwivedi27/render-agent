@@ -1,4 +1,4 @@
-Last synced with the live page: 21 Oct 2026
+Last synced with the live page: 29 Oct 2026
 
 # Drawing-to-Render Agent: Specification (developer copy)
 
@@ -46,7 +46,7 @@ from the PDF (stage 5) → **approval gate (always on)**, Approval screen: desig
 that will be made (and "Change the views" returns to Choose views and plans again), materials,
 fills gaps and corrects facts; answers to unclear or disagreeing items ("What it actually means") re-run stages 4–5
 with the corrections and show the revised plan with what changed before anything is rendered
-(decision 21 Oct 2026) → render (Progress screen, "Step N of 6 · part p of n": Read the drawings, Choose views, Approve the plan, Make the renders, Review, Done) → drawing check (one automatic regeneration on fail) →
+(decision 21 Oct 2026) → render (Progress screen, "Step N of 7 · part p of n": Read the drawings, Plans (PV1, 29 Oct 2026), Choose views, Approve the plan, Make the renders, Review, Done) → drawing check (one automatic regeneration on fail) →
 **thumbnail review**, Review screen: designer approves or flags individual renders with a category and
 a note; only flagged renders are regenerated → approved set in `Output\<input name>\<Dwelling N>\FINAL APPROVED`,
 filed by dwelling; a finished job's Output folder then moves to `Output\Completed\` and Home lists it
@@ -176,6 +176,7 @@ hashes in `manifest.json`. See `knowledge/README.md`.
 | 3 | Evidence | `evidence.json` | LLM, `schemas/evidence.json` |
 | 4 | House spec | `house_specification.json` (ROOMS copied by code from the sheets) | LLM, `schemas/house_spec.json`; `corrections.json` quoted as a data block when present |
 | 5 | Checklist + selections | `checklist.json`, `checklist_validation.json`, `selections.json` | LLM then deterministic validator; `corrections.json` quoted as data; a view-only re-plan from approval re-validates the saved `llm_checklist` with no LLM call |
+| Plan | Plan visuals stages `gate_plan_start` … `gate_continue` (docs/PLAN_VISUALS_SPEC.md §1; 28 Oct 2026, PV0) | `plan/…`, `memory/…` | Each stage is enabled by its PV step; until then new jobs mark it `skipped: not enabled yet`, and jobs started before PV0 mark it `skipped: added after this job started`. Skipped stages count as finished and are left out of progress |
 | Views | Choose views (app jobs; CLI jobs pass at once and use `@views` from their instruction file) | `views_chosen.json`, `@views` written into `ingest.json` and `input/start_options.txt` | Designer in the desktop app (Choose views screen) |
 | Gate | Approval (always on) | `approval.json`, `corrections.json` | Designer in the desktop app (Approval screen); developers: `APPROVE` file or CLI |
 | 6 | Prompts | `prompts/<render_id>.txt`, `references/<view_id>.png` | LLM scene text; code assembles |
@@ -255,7 +256,8 @@ resolves the install root separately from the working root; the Desktop is found
 known-folder API.
 
 ```
-C:\Program Files\RenderAgent\       install root, read-only: program, knowledge/, prompts/, schemas/
+C:\Program Files\RenderAgent\       install root, read-only: program, knowledge/, prompts/, schemas/,
+                                     engine/ and assets/ (plan visuals, 28 Oct 2026)
 
 %LOCALAPPDATA%\RenderAgent\          working root (agent files; designers never need to open it)
   config.yaml
@@ -264,6 +266,8 @@ C:\Program Files\RenderAgent\       install root, read-only: program, knowledge/
                   state.json  selections.json  approval.json  corrections.json
                   review.json  error.json  job.log
   feedback/       feedback.jsonl (every flag and correction, all jobs)
+  memory/         projects/<project key>.json (project memory), agent_rules.json (agent memory, seeded
+                  once with the owner rules of 26 Oct 2026; PLAN_VISUALS_SPEC §13; 28 Oct 2026)
   logs/
 
 Desktop\RenderAgent\                 designer folders, created on first launch
@@ -330,6 +334,8 @@ Each directive below is also an option on the Start step. Start options are writ
 | `@views` | `@views=front_day,rear_day` or `@views=Only external front and back elevation` | Only these views (required views are always kept). View ids, labels and plain words all work: words are matched to `view_set.yaml` views by code (`validate/view_words.py`, no LLM); optional views named here count as requested; words that match no view are listed as ignored, and if nothing matches every view is planned. In the app the view choice is its own screen after the drawings are read (Choose views): ticks or words confirmed as "I understood: …" become `@views` with exactly the chosen ids; an `@views` line (and night words) in the instruction file pre-tick that screen, and its free text is shown with "Read views from this text" to confirm in the same way; with no instruction file the screen alone decides (decision 21 Oct 2026) |
 | `@max_images` | `@max_images=6` | Lowers the per-dwelling limit; cannot raise it |
 | `@select` | `@select entry_door=pivot, spotted gum` | Pre-sets a material selection (still shown at the gate) |
+| `@plans_mode` | `@plans_mode=renders_only` | `plans` or `renders_only` ("Exterior renders only (no plans)", today's path). Pre-selects Start the plan check in the app; a CLI job uses it directly and defaults to `renders_only` (PLAN_VISUALS_SPEC §2, 29 Oct 2026) |
+| `@readout_llm` | `@readout_llm=both` | Readout model `claude`, `openai` or `both`; pre-selects Start the plan check (PLAN_VISUALS_SPEC §2) |
 | `@dry_run` | `@dry_run=true` | Mock provider throughout |
 
 Statuses (amended 15 Oct 2026, M5), each shown in the app in plain words:
@@ -344,6 +350,10 @@ Statuses (amended 15 Oct 2026, M5), each shown in the app in plain words:
 | PAUSED | Paused, needs your attention | key, credit or disk problem; nothing lost; Retry resumes |
 | FAILED | Something went wrong | error.json shown; Retry resumes the existing job |
 | (any, cancel pending) | Cancelling… | running job stops at its next step, then is removed; its Output folder moves to Output\Cancelled |
+| AWAITING_PLAN_START, AWAITING_PLAN_CHECK, AWAITING_ELEVATION_CHOICE, AWAITING_ELEVATION_CHECK, AWAITING_STYLES, AWAITING_FURNISH_CHECK, AWAITING_PLAN_REVIEW, AWAITING_CONTINUE | Start the plan check / Check the plan: questions for you / Do the elevation readout, or skip it? / Check the elevations: questions for you / Choose plan styles / Check the furniture / Review the plans / Plans are ready | plan visuals gates (PLAN_VISUALS_SPEC §1, §14; added 28 Oct 2026, PV0); until its PV step is built the app shows "This screen is coming in PV<n>" |
+| PLAN_COMPLETE | Finished: plans only | the designer chose Finish here on Plans are ready (PLAN_VISUALS_SPEC §9) |
+
+Stage states in `state.json`: pending, running, done, failed, skipped (with a `reason`; 28 Oct 2026).
 
 ## 9. Error handling
 
@@ -391,7 +401,7 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | Corrections | Export feedback fails (disk, permissions) | Plain-English message; no partial zip left (atomic write) |
 | Account | Key missing/invalid/expired | Job PAUSES with "replace the key in Settings" (developers: `.env`); Retry resumes when fixed |
 | Account | Invalid or missing key at install or first run | Installer key page / first-run check fails with a plain message (no-cost authentication call); no job can start until every enabled provider has a valid key |
-| Account | Provider enabled without a key | Provider hidden in Settings and Start; Home names the provider and says to add its key; no job uses it |
+| Account | Provider enabled without a key | Settings lists every provider in `llm.choices` and `images.offered_providers` with "No key yet" (28 Oct 2026, PV0); Start does not offer an image provider without a key; Home names the provider and says to add its key; no job uses it |
 | Account | Out of credit / quota / spending limit (LLM or images; e.g. `insufficient_quota`, "credit balance is too low", HTTP 402) | Never retried. Job PAUSES with code OUT_OF_CREDIT: which provider, the provider's message, where to top up, and the Retry button (developers: `resume`); finished stages and renders kept and never paid for twice |
 | System | Disk below 2 GB free | No new jobs; running jobs pause; message on Home |
 | System | Crash, reboot, power loss | Reopening the app resumes queued and running jobs from `state.json` |
@@ -404,6 +414,15 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | System | Network down | Calls pause and retry; queued jobs wait |
 | People | Approval/review unanswered 2 working days | Never auto-approved; job stays listed on Home (reminder toasts phase 2) |
 | Config | Invalid config or unknown model ID | Agent refuses to start; `doctor` names the setting |
+| Config | `plans.readout_llm_default`, `renders.prompt_writers_default` or `renders.check_llm_default` names no `llm.choices` entry | CONFIG_INVALID naming the setting (28 Oct 2026, PV0) |
+| Config | Wet-area tile colour outside `wet_tile.contrast_min`..`max` against white (`plan_styles.yaml`) | CONFIG_INVALID from the plan styles loader; `doctor` and Help name `wet_tile.colour` with the fix (PLAN_VISUALS_SPEC §15) |
+| Memory | `memory/agent_rules.json` unreadable or invalid | Job continues without remembered rules; plain warning; Help shows "Agent memory file unreadable" with the fix (PLAN_VISUALS_SPEC §15) |
+| Output | Disclaimer missing or contrast below 4.5:1 on an image or PDF page | `output/disclaimer.py` reports the file as not deliverable. Plan overlays (PV2): stamped again once, then the stage stops with DISCLAIMER_FAILED and a plain `error.json`; plans and renders from PV7 (PLAN_VISUALS_SPEC §11) |
+| Plan | No floor plan page in the drawings on the plan path | `p1_trace` stops with NO_FLOOR_PLAN: plain `error.json` saying to check the PDF or start again with "Exterior renders only (no plans)" (PV2) |
+| Plan | No vector walls on a floor plan page (scan, image or other drafting) | The readout model traces the walls from the image; Check the plan says so and labels the walls "traced by <model>" (PLAN_VISUALS_SPEC §3, §15) |
+| Plan | Traced area differs from the drawing's area schedule by more than `areas.tolerance` (`plan_trace.yaml`, 3%) | Shown red in the area table; a Red row with a question in `plan/<dwelling>/readout.json` (PLAN_VISUALS_SPEC §15) |
+| Plan | Both readout models chosen and one fails | Its reading is "not read" and the other is used; Check the plan names the failed model with "Read again with <model>", which re-reads only that model (cached readings are kept) (PLAN_VISUALS_SPEC §15) |
+| Plan | A chosen readout model has no saved key | PAUSED before any call: "Your <Claude/OpenAI> key is not saved…", what to do "Add your <provider> key in Settings, then press Retry" (Practice runs need no key) (PLAN_VISUALS_SPEC §12, §15) |
 
 ## 10. Configuration, security, deployment
 
@@ -413,6 +432,13 @@ stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, 
 `budget.py`); render image settings `images.openai.draft` (size, default 1536×864; quality `low | medium | high`, default `medium`; older files with `size`/`quality` set directly still load, and a `final` block is ignored; decision 20 Oct 2026); `pricing` (USD per 1M tokens per model id, for the token and cost report; empty = "price not set"); `images.delivery_size` (1920×1080: approved landscape renders are centre-cropped to that aspect and scaled locally with Lanczos to exactly this size, lossless sRGB PNG, no AI upscaler; drafts and job copies keep the generated size; portrait finals are delivered as generated in phase 1); `images.room_crop_margin` (0.04 of the page around a room's bbox in interior reference crops); `images.final_long_edge` is deprecated and ignored; references per render (3); planned renders per dwelling
 (≤16); automatic retries after a failed drawing check (1); `paths.feedback` (feedback store); `designer.desktop` (empty = the Windows Desktop known folder) and `designer.folder` (`RenderAgent`) and `designer.completed` (`Completed`) and `designer.cancelled` (`Cancelled`); render concurrency (2); approval gate
 (on); drawing-check strictness; page DPI; install root, working root and Desktop folder names.
+Plan visuals (28 Oct 2026, PV0; PLAN_VISUALS_SPEC §12): `plans.readout_llm_default` (`sonnet`),
+`renders.prompt_writers_default` (`[sonnet, gpt]`), `renders.check_llm_default` (`gpt`), all names
+from `llm.choices`; `images.offered_providers` (`[openai, muapi]`, first = default on screen);
+`paths.memory` (working root), `paths.engine` and `paths.assets` (install root). Every new setting has a default, so older `config.yaml` files load unchanged.
+Settings shows these defaults in plain words; Help checks the plan engine files, the headless
+browser's 3D drawing, a saved key per provider ("Check keys now" runs the no-cost checks),
+the wet-tile contrast and the agent memory, each with a fix text.
 
 Security: keys are entered on the installer page or in Settings, validated with a no-cost
 authentication call (e.g. listing models, never a paid generation), and stored with `keyring` in

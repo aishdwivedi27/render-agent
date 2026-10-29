@@ -1,4 +1,9 @@
-"""Anthropic Messages API implementation of llm.base.BaseLLM using a forced tool call."""
+"""Anthropic Messages API implementation of llm.base.BaseLLM: the answer comes back as one tool call.
+
+Current Claude models reject a forced tool choice (`tool_choice` "tool" / "any" returns a 400), so the
+request offers the single answer tool with `tool_choice` "auto" and the system prompt tells the model to
+answer only by calling it. The answer is still validated against the schema, with one repair retry
+(llm/base.py), so a reply in plain text is caught there."""
 
 from __future__ import annotations
 
@@ -30,6 +35,10 @@ class AnthropicLLM(BaseLLM):
         return {
             "model": self.model,
             "max_tokens": self.max_output_tokens,
+            "system": (
+                f"Answer only by calling the `{schema_name}` tool exactly once, with the complete answer. "
+                "Do not reply in text."
+            ),
             "messages": [{"role": "user", "content": content}],
             "tools": [
                 {
@@ -38,7 +47,7 @@ class AnthropicLLM(BaseLLM):
                     "input_schema": schema,
                 }
             ],
-            "tool_choice": {"type": "tool", "name": schema_name},
+            "tool_choice": {"type": "auto"},
         }
 
     def _send(self, prompt: str, images: list[Path], schema: dict[str, Any], schema_name: str) -> SendResult:

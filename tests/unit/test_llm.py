@@ -159,7 +159,7 @@ def test_anthropic_response_parsing():
     assert anthropic_llm.parse_response(cut, "x").stop == "truncated"
 
 
-def test_requests_use_strict_schema_and_forced_tool(tmp_path):
+def test_requests_use_strict_schema_and_the_answer_tool(tmp_path):
     img = tmp_path / "p.png"
     Image.new("RGB", (5000, 100), "white").save(img)
     common = {"model": "m", "max_output_tokens": 10, "timeout_seconds": 5, "retries": 1}
@@ -169,7 +169,9 @@ def test_requests_use_strict_schema_and_forced_tool(tmp_path):
     assert req["text"]["format"] == {"type": "json_schema", "name": "x", "schema": SCHEMA, "strict": True}
     assert req["input"][0]["content"][1]["image_url"].startswith("data:image/png;base64,")
     req = anthropic_llm.AnthropicLLM(api_key="k", **common)._request("hi", [img], SCHEMA, "x")
-    assert req["tool_choice"] == {"type": "tool", "name": "x"} and req["tools"][0]["input_schema"] == SCHEMA
+    # current Claude models reject a forced tool choice (400): auto, steered by the system prompt
+    assert req["tool_choice"] == {"type": "auto"} and req["tools"][0]["input_schema"] == SCHEMA
+    assert "`x` tool exactly once" in req["system"]
     assert req["messages"][0]["content"][-1] == {"type": "text", "text": "hi"}
 
 

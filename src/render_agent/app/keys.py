@@ -89,6 +89,13 @@ def needed_providers(settings: Settings) -> list[str]:
     return sorted(llm | set(settings.images.enabled_providers))
 
 
+def settings_providers(settings: Settings) -> list[str]:
+    """Every provider Settings offers a key for: those needed now, the llm.choices providers (plan
+    readout, render prompts, drawing check) and the image providers offered on screen."""
+    choices = {c.provider for c in settings.llm.choices.values()}
+    return sorted(set(needed_providers(settings)) | choices | set(settings.images.offered_providers))
+
+
 def has_key(settings: Settings, provider: str) -> bool:
     return bool(settings.secret(KEY_ENV_VARS[provider]))
 

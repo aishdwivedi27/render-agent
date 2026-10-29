@@ -36,7 +36,7 @@ function problem(p, extra = "") {
 }
 
 // The job's one fixed sequence. `now` is the index of the current step; `attention` marks a stop.
-const STEPS = ["Read the drawings", "Choose views", "Approve the plan", "Make the renders", "Review", "Done"];
+const STEPS = ["Read the drawings", "Plans", "Choose views", "Approve the plan", "Make the renders", "Review", "Done"];
 // `job` (optional) adds "part 3 of 5" under the step that is running.
 function steps(now, attention = false, job = null) {
   const part = job && job.parts > 1 && job.part && job.step - 1 === now ? `<small class="part">part ${job.part} of ${job.parts}</small>` : "";
@@ -56,7 +56,7 @@ function stepLine(job) {
 }
 
 function pill(status, text) {
-  const kind = { AWAITING_VIEWS: "wait", AWAITING_APPROVAL: "wait", AWAITING_REVIEW: "wait", FAILED: "bad", PAUSED: "bad", SUCCEEDED: "good", RUNNING: "run", RENDERING: "run", NEW: "run" }[status] || "";
+  const kind = { AWAITING_PLAN_START: "wait", AWAITING_PLAN_CHECK: "wait", AWAITING_VIEWS: "wait", AWAITING_APPROVAL: "wait", AWAITING_REVIEW: "wait", FAILED: "bad", PAUSED: "bad", SUCCEEDED: "good", RUNNING: "run", RENDERING: "run", NEW: "run" }[status] || "";
   return `<span class="pill ${kind}">${esc(text)}</span>`;
 }
 
@@ -105,7 +105,7 @@ async function homeScreen(keepMessage) {
   </section>`;
 
   const row = (j) => `<div class="row selectable" data-job="${esc(j.id)}" tabindex="0">
-        <span><span class="name">${esc(j.input_name)}</span><br><span class="sub">${j.error ? esc(j.error.what_happened) : j.status === "SUCCEEDED" ? `Finished ${esc(j.updated.slice(0, 16).replace("T", " "))}` : `${esc(stepLine(j))} · updated ${esc(j.updated.slice(11, 16))}`}</span></span>
+        <span><span class="name">${esc(j.input_name)}</span><br><span class="sub">${j.readout ? `Readout: ${esc(j.readout)} · ` : ""}${j.error ? esc(j.error.what_happened) : j.status === "SUCCEEDED" ? `Finished ${esc(j.updated.slice(0, 16).replace("T", " "))}` : `${esc(stepLine(j))} · updated ${esc(j.updated.slice(11, 16))}`}</span></span>
         <span class="end">${pill(j.status, j.status_text)}${j.can_retry ? `<button data-retry="${esc(j.id)}">Retry</button>` : ""}${j.can_cancel ? `<button data-cancel="${esc(j.id)}">Cancel</button>` : ""}${j.status === "SUCCEEDED" && j.output_folder ? `<button data-open="${esc(j.id)}">Open folder</button>` : ""}</span></div>`;
   const done = home.jobs.filter((j) => j.status === "SUCCEEDED");
   const jobs = active.length ? active.map(row).join("") : '<div class="empty">Jobs you start appear here.</div>';
@@ -184,13 +184,16 @@ async function startSelected(anyway) {
 // ---------- one job ----------
 async function jobScreen(id) {
   const job = await api(`/jobs/${enc(id)}`);
-  const meta = [esc(job.input_name), pill(job.status, job.status_text), `<span class="mono">${esc(job.id)}</span>`];
+  const meta = [esc(job.input_name), pill(job.status, job.status_text), ...(job.readout ? [`Readout: ${esc(job.readout)}`] : []), `<span class="mono">${esc(job.id)}</span>`];
   const warn = (job.warnings || []).map((w) => `<div class="notice"><p>${esc(w)}</p></div>`).join("") + (job.publish_problem ? problem({ what_happened: job.publish_problem, what_to_do: "" }) : "");
   if (job.queued === null && (job.status === "FAILED" || job.status === "PAUSED")) return stoppedScreen(job, meta, warn);
+  if (job.queued === null && job.screen === "plan_start") return planStartScreen(job, meta, warn);
+  if (job.queued === null && job.screen === "plan_check") return planCheckScreen(job, meta, warn);
   if (job.queued === null && job.screen === "views") return viewsScreen(job, meta, warn);
   if (job.queued === null && job.screen === "approval") return approvalScreen(job, meta, warn);
   if (job.queued === null && job.screen === "review") return reviewScreen(job, meta, warn);
   if (job.queued === null && job.screen === "results") return resultsScreen(job, meta, warn);
+  if (job.queued === null && job.screen === "coming") return comingScreen(job, meta, warn);
   return progressScreen(job, meta, warn);
 }
 
@@ -215,22 +218,135 @@ function stoppedScreen(job, meta, warn) {
   document.getElementById("cancel-job").onclick = () => cancelJob(job.id);
 }
 
+// a plan visuals screen that a later PV step builds: a plain placeholder so a practice run stops here
+function comingScreen(job, meta, warn) {
+  view.innerHTML = head(job.status_text, job.coming, meta, stepOf(job), false, job)
+    + warn + `<section class="panel"><p>${esc(job.coming)}</p><p class="muted">The job is saved and waits here.</p></section>
+    <div class="actions">${job.can_cancel ? '<button id="cancel-job">Cancel job</button>' : ""}<a href="#/home">Back to Home</a></div>`;
+  const cj = document.getElementById("cancel-job");
+  if (cj) cj.onclick = () => cancelJob(job.id);
+}
+
 function progressScreen(job, meta, warn) {
   const p = job.progress || { done: 0, total: 1 };
   const pct = Math.round((100 * p.done) / Math.max(p.total, 1));
-  const afterApproval = stepOf(job) >= 3;
-  const planning = stepOf(job) === 2;
+  const afterApproval = stepOf(job) >= 4;
+  const planning = stepOf(job) === 3;
+  const plans = stepOf(job) === 1;
   const counting = job.stage_text === "Making the renders" || job.stage_text === "Checking renders against the drawings";
   const what = job.queued > 0 ? `Waiting its turn (${job.queued} ahead)`
     : job.stage_text === "Waiting for your approval" ? "Starting the renders…" : stepLine(job);
-  const detail = counting ? `${p.done} of ${p.total} renders` : afterApproval ? "Preparing each render from the drawings" : planning ? "Planning the views you chose" : "Reading the drawings";
-  view.innerHTML = head(afterApproval ? "Making your renders" : planning ? "Planning your views" : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, stepOf(job), false, job)
+  const detail = counting ? `${p.done} of ${p.total} renders` : afterApproval ? "Preparing each render from the drawings" : planning ? "Planning the views you chose" : plans ? "Working on the plans" : "Reading the drawings";
+  view.innerHTML = head(afterApproval ? "Making your renders" : planning ? "Planning your views" : plans ? "Starting the plan check" : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, stepOf(job), false, job)
     + warn + `<section class="panel progress"><p class="stage">${esc(what)}</p><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
     <p class="muted">${esc(detail)}</p></section>
     <div class="actions">${job.can_cancel ? '<button id="cancel-job">Cancel job</button>' : ""}<a href="#/home">Back to Home</a></div>`;
   const cj = document.getElementById("cancel-job");
   if (cj) cj.onclick = () => cancelJob(job.id);
   poll(async () => { const j = await api(`/jobs/${enc(job.id)}`); if (j.status !== job.status || j.queued !== job.queued || j.stage_text !== job.stage_text || j.part !== job.part || (j.progress && j.progress.done !== p.done)) route(); });
+}
+
+// ---------- Start the plan check ----------
+async function planStartScreen(job, meta, warn) {
+  const r = await api(`/jobs/${enc(job.id)}/plan-start`);
+  let pick = r.plans_mode === "renders_only" ? "renders_only" : r.readout_llm;
+  const card = (id, name, sub, ok = true) => `<div class="item" role="radio" tabindex="0" data-choice="${esc(id)}" aria-checked="false" ${ok ? "" : 'aria-disabled="true"'}>
+      <span class="radio"></span><span><span class="name">${esc(name)}</span><br><span class="sub muted">${esc(sub)}</span></span><span></span></div>`;
+  const models = r.options.map((o) => card(o.id, o.id === "claude" ? "Claude (standard)" : o.label,
+    o.available ? `Estimated reading cost: ${o.cost}${o.id === "both" ? " (about double: each model reads separately)" : ""}` : `Not available: ${o.why_not}`, o.available)).join("");
+  const f = r.from_file || {};
+  const fileNote = Object.keys(f).length ? `<div class="notice"><strong>From the instruction file</strong><p style="margin:4px 0 0">${f.plans_mode === "renders_only" ? "Exterior renders only (no plans)" : `Readout model: ${esc({ claude: "Claude", openai: "OpenAI", both: "Claude + OpenAI" }[f.readout_llm] || f.readout_llm || "standard")}`}. The choice below is set from it; check it.</p></div>` : "";
+  view.innerHTML = head("Start the plan check", "The drawings are read. Choose which model reads the floor plan, or skip the plans and make exterior renders only.", meta, 1, false, job)
+    + warn + `<div id="msg"></div>${fileNote}
+    <section class="panel" style="padding:18px"><div class="dz-head" style="margin-bottom:10px"><strong>Readout model</strong>
+      <button class="link info" id="info" title="${esc(r.info)}" aria-expanded="false" aria-controls="info-text">ⓘ What is this?</button></div>
+      <p class="notice" id="info-text" hidden style="margin:0 0 12px">${esc(r.info)}</p>
+      <div class="items" role="radiogroup" aria-label="Readout model">${models}</div>
+      <p class="muted" style="margin:10px 0 0">Costs are estimates for ${r.sheets} floor plan sheet${r.sheets === 1 ? "" : "s"} from the prices in Settings; "price not set" until they are filled in.</p></section>
+    <section class="panel" style="padding:18px;margin-top:16px"><div class="items" role="radiogroup" aria-label="Or">${card("renders_only", "Exterior renders only (no plans)", "Skips every plan step and goes straight to Choose views, as before.")}</div></section>
+    <div class="sticky-actions"><div class="actions"><button class="primary" id="go">Continue</button><a href="#/home">Back to Home</a></div></div>`;
+  const cards = [...view.querySelectorAll("[data-choice]")];
+  const show = () => cards.forEach((c) => c.setAttribute("aria-checked", String(c.dataset.choice === pick)));
+  cards.forEach((c) => {
+    if (c.getAttribute("aria-disabled") === "true") return;
+    c.onclick = () => { pick = c.dataset.choice; show(); };
+    c.onkeydown = (e) => { if (e.key === " " || e.key === "Enter") { e.preventDefault(); c.onclick(); } };
+  });
+  show();
+  const info = document.getElementById("info");
+  info.onclick = () => { const t = document.getElementById("info-text"); t.hidden = !t.hidden; info.setAttribute("aria-expanded", String(!t.hidden)); };
+  const go = document.getElementById("go");
+  go.onclick = async () => {
+    go.disabled = true; go.textContent = "Starting…";
+    const body = pick === "renders_only" ? { plans_mode: "renders_only" } : { plans_mode: "plans", readout_llm: pick };
+    try { await api(`/jobs/${enc(job.id)}/plan-start`, body); route(); }
+    catch (e) { go.disabled = false; go.textContent = "Continue"; document.getElementById("msg").innerHTML = problem(e.data); }
+  };
+}
+
+// ---------- Check the plan (the trace; read-only until the questions come in PV3) ----------
+async function planCheckScreen(job, meta, warn) {
+  const r = await api(`/jobs/${enc(job.id)}/plan-check`);
+  const ds = r.dwellings;
+  let at = 0;
+  const pct = (v) => v === null || v === undefined ? "" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
+  const m2 = (v) => v === null || v === undefined ? '<span class="muted">not read</span>' : `${Number(v).toFixed(2)} m²`;
+  const failed = Object.entries(r.failed || {});
+  const failNote = failed.length ? `<div class="notice bad">${failed.map(([m, why]) => `<p><strong>${esc(m)} could not read the drawing.</strong> ${esc(why)}</p>`).join("")}
+      <div style="margin-top:8px"><button id="reread">Read again with ${esc(failed.map(([m]) => m).join(" and "))}</button> <span class="muted">the other reading is kept</span></div></div>` : "";
+  const notes = (r.notes || []).map((n) => `<div class="notice"><p>${esc(n)}</p></div>`).join("");
+  const tabs = ds.length > 1 ? `<div class="tabs" role="tablist">${ds.map((d, i) => `<button role="tab" data-tab="${i}">${esc(d.id)}</button>`).join("")}</div>` : "";
+  view.innerHTML = head("Check the plan", "The walls traced from your drawing are drawn over it. Check they sit on the drawing's walls and that the areas make sense; the questions come next.", meta, 1, false, job)
+    + warn + `<div id="msg"></div>${failNote}${notes}${tabs}<div id="dwelling"></div>
+    <div class="sticky-actions"><div class="actions"><button class="primary" id="go">Continue</button><a href="#/home">Back to Home</a></div></div>`;
+  const show = () => {
+    const d = ds[at];
+    view.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(Number(b.dataset.tab) === at)));
+    if (!d) { document.getElementById("dwelling").innerHTML = '<section class="panel"><p>No plan was traced.</p></section>'; return; }
+    const rows = d.areas.map((a) => `<tr class="${a.over ? "over" : ""}"><td>${esc(a.area)}</td><td>${a.drawing === null ? '<span class="muted">not on the drawing</span>' : m2(a.drawing)}</td><td>${m2(a.traced)}</td><td>${a.over ? `<strong>${pct(a.difference)}</strong>` : pct(a.difference)}</td></tr>`).join("");
+    const items = d.rows.filter((x) => !/ area$/.test(x.item)).map((x) => `<li><span class="dot ${esc(x.confidence.toLowerCase())}"></span><strong>${esc(x.item)}:</strong> ${esc(x.reading)}${x.question ? `<br><span class="muted">${esc(x.question)}</span>` : ""}</li>`).join("");
+    const src = `/api/jobs/${enc(job.id)}/file/${d.overlay.split("/").map(enc).join("/")}`;
+    document.getElementById("dwelling").innerHTML = `${d.mirror ? `<div class="notice"><p><strong>${esc(d.mirror)}.</strong> You will be asked to confirm this.</p></div>` : ""}
+      <p class="muted method">${esc(d.method)}</p>
+      <div class="plan-check"><section class="panel zoom"><div class="zoom-tools"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit">Fit</button></div>
+        <div class="zoom-view" id="zv"><img id="zimg" alt="Traced walls over the floor plan of ${esc(d.id)}" src="${src}"></div></section>
+      <section class="panel" style="padding:18px"><h3 style="margin:0 0 8px">Areas</h3>
+        <table class="areas"><thead><tr><th>Area</th><th>Drawing</th><th>Traced</th><th>Difference</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">The drawing has no area schedule.</td></tr>'}</tbody></table>
+        <p class="muted" style="margin:8px 0 0">More than 3% different is shown in red and becomes a question.</p>
+        ${items ? `<h3 style="margin:16px 0 8px">Also found</h3><ul class="found">${items}</ul>` : ""}</section></div>`;
+    zoomable(document.getElementById("zv"), document.getElementById("zimg"));
+  };
+  view.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { at = Number(b.dataset.tab); show(); }));
+  show();
+  const rr = document.getElementById("reread");
+  if (rr) rr.onclick = async () => { rr.disabled = true; try { await api(`/jobs/${enc(job.id)}/plan-check/reread`, {}); route(); } catch (e) { rr.disabled = false; document.getElementById("msg").innerHTML = problem(e.data); } };
+  const go = document.getElementById("go");
+  go.onclick = async () => {
+    go.disabled = true;
+    try { await api(`/jobs/${enc(job.id)}/plan-check/continue`, {}); route(); }
+    catch (e) { go.disabled = false; document.getElementById("msg").innerHTML = problem(e.data); }
+  };
+}
+
+// zoom with the buttons or the mouse wheel, drag to move around; Fit shows the whole image
+function zoomable(box, img) {
+  let z = 1, x = 0, y = 0, drag = null;
+  const apply = () => { img.style.transform = `translate(${x}px, ${y}px) scale(${z})`; };
+  const fit = () => { z = 1; x = 0; y = 0; apply(); };
+  const zoomAt = (f, cx, cy) => {
+    const nz = Math.min(8, Math.max(1, z * f));
+    x = cx - ((cx - x) * nz) / z; y = cy - ((cy - y) * nz) / z; z = nz;
+    if (z === 1) { x = 0; y = 0; }
+    apply();
+  };
+  document.getElementById("zin").onclick = () => zoomAt(1.5, box.clientWidth / 2, box.clientHeight / 2);
+  document.getElementById("zout").onclick = () => zoomAt(1 / 1.5, box.clientWidth / 2, box.clientHeight / 2);
+  document.getElementById("zfit").onclick = fit;
+  box.onwheel = (e) => { e.preventDefault(); const b = box.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.2 : 1 / 1.2, e.clientX - b.left, e.clientY - b.top); };
+  box.onpointerdown = (e) => { drag = { sx: e.clientX - x, sy: e.clientY - y }; box.setPointerCapture(e.pointerId); };
+  box.onpointermove = (e) => { if (drag && z > 1) { x = e.clientX - drag.sx; y = e.clientY - drag.sy; apply(); } };
+  box.onpointerup = () => { drag = null; };
+  fit();
 }
 
 // ---------- Choose views ----------
@@ -246,7 +362,7 @@ async function viewsScreen(job, meta, warn) {
   const fileNote = f.present && (f.views.length || f.text) ? `<div class="notice"><strong>From the instruction file</strong>
       ${f.views.length ? `<p style="margin:4px 0 0">Views asked for: <span class="mono">${esc(f.views.join(", "))}</span>. The ticks below are set from it; check them.</p>` : ""}
       ${f.text ? `<p style="margin:4px 0 0;white-space:pre-line">${esc(f.text)}</p><div style="margin-top:8px"><button id="use-file">Read views from this text</button> <span class="muted">puts it in the words box below for you to confirm</span></div>` : ""}</div>` : "";
-  view.innerHTML = head("Choose the views", `The drawings are read (${r.dwellings.length} dwelling${r.dwellings.length > 1 ? "s" : ""}). Choose what to render; the agent then plans those views and shows you the plan to approve.`, meta, 1, false, job)
+  view.innerHTML = head("Choose the views", `The drawings are read (${r.dwellings.length} dwelling${r.dwellings.length > 1 ? "s" : ""}). Choose what to render; the agent then plans those views and shows you the plan to approve.`, meta, 2, false, job)
     + warn + `<div id="msg"></div>${fileNote}
     <section class="panel"><div class="actions" style="margin:0 0 8px"><button class="link" id="pick-all">All views</button><button class="link" id="pick-ext">External only</button><button class="link" id="pick-int">Interior only</button><button class="link" id="pick-none">Clear</button></div>
       <div class="viewlist">${rows}</div>
@@ -338,7 +454,7 @@ async function approvalScreen(job, meta, warn) {
   const dwPick = a.dwellings_available.length > 1 ? `<label for="dw" style="margin:0">Dwellings</label><input type="text" id="dw" value="all" placeholder="all, or e.g. 1, 3" style="max-width:180px">` : "";
   const corr = state.draftCorrections.map((c, i) => `<div class="grid2"><div><label>Fact</label><input type="text" data-cf="${i}" value="${esc(c.fact)}" placeholder="e.g. Roof pitch"></div><div><label>Correct value</label><input type="text" data-cv="${i}" value="${esc(c.value)}" placeholder="e.g. 25 degrees"></div></div>`).join("");
 
-  view.innerHTML = head("Waiting for your approval", "Check the views and materials. Nothing is rendered, and nothing is paid for, until you approve.", meta, 2)
+  view.innerHTML = head("Waiting for your approval", "Check the views and materials. Nothing is rendered, and nothing is paid for, until you approve.", meta, 3)
     + warn + `<div id="msg"></div>` + changed
     + `<section class="panel summary"><span class="count">${a.planned_images}</span><span><strong>images will be made</strong><br><span class="muted">${a.practice_run ? "Practice run: placeholder images, no cost." : "Each one is checked against the drawings. Renders are drafts: approving one delivers that same image, without the DRAFT mark, at Full HD."}${need ? ` ${need} material${need > 1 ? "s need" : " needs"} your choice first.` : ""}</span></span></section>`
     + ignored
@@ -425,7 +541,7 @@ async function reviewScreen(job, meta, warn) {
           <div class="buttons"><button class="flag" id="send-flag">${c.status === "flagged" ? "Save feedback" : "Flag this render"}</button><button id="cancel-flag">Cancel</button></div></div>` : ""}
       </div></article>`).join("");
   const label = flagged ? `Continue: redo ${flagged} flagged` : pending ? "Save and come back later" : "Finish";
-  view.innerHTML = head("Ready for your review", "Approve the renders you are happy with. Flag the others with what to change: only flagged renders are made again.", meta, 4)
+  view.innerHTML = head("Ready for your review", "Approve the renders you are happy with. Flag the others with what to change: only flagged renders are made again.", meta, 5)
     + warn + `<div id="msg"></div><div class="cards">${cards}</div>
     <div class="sticky-actions"><div class="actions"><button class="primary" id="continue">${label}</button>
       ${pending ? `<button class="link" id="approve-rest">Approve all ${pending} waiting</button>` : ""}
@@ -474,7 +590,7 @@ function showViewer(c, file) {
 // ---------- Results ----------
 function resultsScreen(job, meta, warn) {
   const f = { shared: "Common", draft: "Draft", draft_final: "draft-final", final: "FINAL APPROVED", ...(job.folders || {}) };
-  view.innerHTML = head("Finished", "Every render is approved. The final images are in the Output folder, filed by dwelling.", meta, 5)
+  view.innerHTML = head("Finished", "Every render is approved. The final images are in the Output folder, filed by dwelling.", meta, 6)
     + warn + `<section class="panel progress"><div class="done-mark" aria-hidden="true">✓</div>
       <p style="margin:0 0 6px"><strong>Approved images</strong> are in each dwelling's <span class="path">${esc(f.final)}</span> folder (views shared by several dwellings also in <span class="path">${esc(f.shared)}</span>), under <span class="path">${esc(job.output_folder || "")}</span></p>
       <p class="muted" style="margin:0">Every version with the DRAFT mark is in the <span class="path">${esc(f.draft)}</span> folder beside it; the approved one is also in <span class="path">${esc(f.draft)}\\${esc(f.draft_final)}</span>. report.html lists every render with tokens and estimated cost.</p></section>
@@ -498,6 +614,7 @@ async function settingsScreen(results = {}) {
   const llms = s.llm_choices.map((c) => `<option value="${esc(c)}" ${c === s.llm_choice ? "selected" : ""}>${esc(c)}</option>`).join("");
   const saved = s.providers.filter((p) => p.has_key).length;
   view.innerHTML = head("Keys and services", "Keys are kept in Windows Credential Manager on this laptop. Testing a key never costs anything.", [`${saved} of ${s.providers.length} keys saved`, `Images: ${esc(s.image_providers.join(", ") || "none yet")}`])
+    + defaultsPanel(s.defaults)
     + rows + `<section class="panel" style="padding:18px 22px"><label for="llm" style="margin-top:0">Drawing reader for new jobs</label><select id="llm"><option value="">Standard</option>${llms}</select></section>
     <div class="actions"><button class="primary" id="save">Save keys</button></div>`;
   view.querySelectorAll("[data-test]").forEach((b) => (b.onclick = async () => {
@@ -514,20 +631,41 @@ async function settingsScreen(results = {}) {
   };
 }
 
+// plan visuals defaults for new jobs, in plain words; each job can change them on its own screens
+function defaultsPanel(d) {
+  if (!d) return "";
+  const row = (k, v, note) => `<div class="row"><span><strong>${esc(k)}</strong>${note ? `<br><span class="muted">${esc(note)}</span>` : ""}</span><span>${esc(v)}</span></div>`;
+  const also = d.images_also.length ? `${d.images_also.join(", ")} also listed` : "";
+  return `<h2 style="margin-top:0">Defaults for new jobs</h2><div class="list" style="margin-bottom:18px">`
+    + row("Readout model", d.readout, "Reads the floor plan, elevations and furniture")
+    + row("Render prompts", d.prompt_writers, "Both write a scene prompt; you pick one per view")
+    + row("Drawing check", d.drawing_check, "Checks each render against the drawings")
+    + row("Images", d.images, also)
+    + `</div>`;
+}
+
 // ---------- Help ----------
 async function helpScreen() {
   const checks = await api("/help/doctor");
   const problems = checks.filter((c) => c.level !== "OK").length;
-  const list = checks.map((c) => `<div class="row"><span>${esc(c.text)}</span><span class="pill ${c.level === "OK" ? "good" : "bad"}">${esc(c.level)}</span></div>`).join("");
+  const list = checks.map((c) => `<div class="row"><span>${esc(c.text)}${c.fix ? `<br><span class="muted">Fix: ${esc(c.fix)}</span>` : ""}</span><span class="pill ${c.level === "OK" ? "good" : "bad"}">${esc(c.level)}</span></div>`).join("");
   view.innerHTML = head("Help", "If something is not working, copy the diagnostics and send them to whoever looks after Render Agent.", [problems ? `${problems} check${problems > 1 ? "s" : ""} to look at` : "All checks fine"])
     + `<h2 style="margin-top:0">Health checks</h2><div class="list">${list}</div>
-    <div class="actions"><button id="copy">Copy diagnostics</button></div>
+    <div class="actions"><button id="copy">Copy diagnostics</button><button id="check-keys">Check keys now</button></div>
+    <div class="list" id="key-results" hidden></div>
     <h2>Send your feedback</h2><p class="muted">Makes a zip of your flags and corrections with small thumbnails. No drawings and no keys. It is saved in the RenderAgent folder on your Desktop.</p>
     <div class="actions"><button class="primary" id="export">Export feedback</button></div>`;
   document.getElementById("copy").onclick = async () => {
     const d = await api("/help/diagnostics");
     try { await navigator.clipboard.writeText(d.text); toast("Diagnostics copied."); }
     catch { const t = document.createElement("textarea"); t.value = d.text; document.body.append(t); t.select(); document.execCommand("copy"); t.remove(); toast("Diagnostics copied."); }
+  };
+  document.getElementById("check-keys").onclick = async () => {
+    const out = document.getElementById("key-results"); out.hidden = false; out.innerHTML = '<div class="row"><span class="muted">Checking keys (free, no images made)…</span></div>';
+    try {
+      const r = await api("/help/check-keys", {});
+      out.innerHTML = r.map((k) => `<div class="row"><span><strong>${esc(k.label)}</strong><br><span class="muted">${esc(k.message)}</span></span><span class="pill ${k.ok ? "good" : "bad"}">${k.ok ? "Works" : "Check this"}</span></div>`).join("");
+    } catch (e) { out.innerHTML = `<div class="row"><span>${esc(e.data.what_happened)}</span></div>`; }
   };
   document.getElementById("export").onclick = async () => {
     try { const r = await api("/help/export-feedback", {}); toast(`Feedback exported: ${r.path}`); } catch (e) { toast(e.data.what_happened); }

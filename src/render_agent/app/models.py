@@ -33,13 +33,15 @@ class JobSummary(BaseModel):
     error: Problem | None = None
     warnings: list[str] = Field(default_factory=list)
     updated: str = ""
-    step: int = 1  # 1-5: Start, Approve the plan, Make the renders, Review, Done
+    step: int = 1  # 1-7, plain.STEPS: Read the drawings, Plans, Choose views, ... Review, Done
     step_name: str = ""
-    steps: int = 5
+    steps: int = 7
     part: int = 0  # part of the step that is running (0 when the step has no parts running)
     parts: int = 0
     part_name: str = ""
     output_folder: str | None = None
+    readout: str = ""  # "Claude", "OpenAI", "Claude + OpenAI", "Exterior renders only" ('' = not chosen)
+    coming: str = ""  # placeholder line for a plan visuals screen a later PV step builds
 
 
 class Warning(BaseModel):
@@ -111,6 +113,11 @@ class ApproveIn(BaseModel):
 class ChooseViewsIn(BaseModel):
     views: list[str] = Field(default_factory=list, max_length=50)  # the exact views to plan
     words: str = Field(default="", max_length=1000)  # the designer's own words, kept for the record
+
+
+class PlanStartIn(BaseModel):
+    plans_mode: Literal["plans", "renders_only"]
+    readout_llm: Literal["claude", "openai", "both"] = "claude"
 
 
 class InterpretIn(BaseModel):

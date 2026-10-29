@@ -1,0 +1,385 @@
+{
+  "type": "object",
+  "description": "plan/<dwelling>/geometry.json: traced walls (mm, page coordinates at the drawing scale, y down), rooms, openings, recesses, fixtures, clearance zones and the area check (PLAN_VISUALS_SPEC section 3).",
+  "properties": {
+    "dwelling": {
+      "type": "string"
+    },
+    "mirror_of": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "method": {
+      "type": "string",
+      "enum": [
+        "vector",
+        "raster_trace"
+      ]
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "scale": {
+      "type": "object",
+      "properties": {
+        "ratio": {
+          "type": "string"
+        },
+        "mm_per_pt": {
+          "type": [
+            "number",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "ratio",
+        "mm_per_pt"
+      ],
+      "additionalProperties": false
+    },
+    "region": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "description": "x0, y0, x1, y1 in mm"
+    },
+    "walls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "exterior": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "outline",
+          "exterior"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "area_m2": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "outline",
+          "area_m2",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hinged_door",
+              "cavity_slider",
+              "sliding_door",
+              "open_walkway",
+              "arch",
+              "garage_door",
+              "window"
+            ]
+          },
+          "host_wall": {
+            "type": "string"
+          },
+          "position_mm": {
+            "type": "number"
+          },
+          "width_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "swing": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "host_wall",
+          "position_mm",
+          "width_mm",
+          "code",
+          "swing",
+          "rooms",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "robe",
+              "shower_recess",
+              "linen",
+              "nib",
+              "other"
+            ]
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "room",
+          "outline",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "drawn",
+              "confirmed"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "room",
+          "outline",
+          "source",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "clearance_zones": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Recorded only; never drawn or rendered.",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "wc_clearance"
+            ]
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "evidence": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "room",
+          "outline",
+          "evidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "area_check": {
+      "type": "object",
+      "properties": {
+        "tolerance": {
+          "type": "number"
+        },
+        "results": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "area": {
+                "type": "string"
+              },
+              "traced_m2": {
+                "type": "number"
+              },
+              "schedule_m2": {
+                "type": [
+                  "number",
+                  "null"
+                ]
+              },
+              "within": {
+                "type": "boolean"
+              },
+              "read": {
+                "type": "boolean",
+                "description": "false when the traced plan has no reading for this area (Practice run)"
+              }
+            },
+            "required": [
+              "area",
+              "traced_m2",
+              "schedule_m2",
+              "within",
+              "read"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "tolerance",
+        "results"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "dwelling",
+    "mirror_of",
+    "method",
+    "models",
+    "scale",
+    "region",
+    "walls",
+    "rooms",
+    "openings",
+    "recesses",
+    "fixtures",
+    "clearance_zones",
+    "area_check"
+  ],
+  "additionalProperties": false
+}

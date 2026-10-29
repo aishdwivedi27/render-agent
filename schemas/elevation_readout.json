@@ -1,0 +1,256 @@
+{
+  "type": "object",
+  "description": "plan/elevations.json: elevation readout per face. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "properties": {
+    "dwelling": {
+      "type": "string"
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "faces": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "Heights and other values the drawing does not show stay NOT FOUND.",
+        "properties": {
+          "face": {
+            "type": "string",
+            "enum": [
+              "front",
+              "rear",
+              "left",
+              "right"
+            ]
+          },
+          "storeys": {
+            "type": "string"
+          },
+          "roof_form": {
+            "type": "string"
+          },
+          "roof_pitch": {
+            "type": "string"
+          },
+          "eaves": {
+            "type": "string"
+          },
+          "wall_materials": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "material": {
+                  "type": "string"
+                },
+                "colour": {
+                  "type": "string"
+                },
+                "schedule_ref": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "material",
+                "colour",
+                "schedule_ref"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "openings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "plan_opening": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "look": {
+                  "type": "string"
+                },
+                "head_mm": {
+                  "type": "string"
+                },
+                "sill_mm": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "plan_opening",
+                "kind",
+                "look",
+                "head_mm",
+                "sill_mm"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "garage_door": {
+            "type": "string"
+          },
+          "entry_feature": {
+            "type": "string"
+          },
+          "differences": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "face",
+          "storeys",
+          "roof_form",
+          "roof_pitch",
+          "eaves",
+          "wall_materials",
+          "openings",
+          "garage_door",
+          "entry_feature",
+          "differences"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "description": "One readout row. Orange and Red rows carry a question; Green rows none (checked in code).",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "readings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "description": "One model's independent reading of this row.",
+              "properties": {
+                "model": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "read",
+                    "not_read"
+                  ]
+                },
+                "reading": {
+                  "type": "string"
+                },
+                "confidence": {
+                  "type": "string",
+                  "enum": [
+                    "GREEN",
+                    "ORANGE",
+                    "RED"
+                  ]
+                }
+              },
+              "required": [
+                "model",
+                "status",
+                "reading",
+                "confidence"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "reading": {
+            "type": "string"
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "answer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "item",
+          "category",
+          "readings",
+          "reading",
+          "alternative",
+          "evidence",
+          "confidence",
+          "question",
+          "answer"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "properties": {
+        "green": {
+          "type": "integer"
+        },
+        "orange": {
+          "type": "integer"
+        },
+        "red": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "green",
+        "orange",
+        "red"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "required": [
+    "dwelling",
+    "models",
+    "faces",
+    "rows",
+    "summary"
+  ],
+  "additionalProperties": false
+}

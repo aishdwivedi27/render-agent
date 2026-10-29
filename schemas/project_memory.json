@@ -1,0 +1,90 @@
+{
+  "type": "object",
+  "description": "memory/projects/<key>.json: data only; never changes directives, limits, providers or facts. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "properties": {
+    "project_key": {
+      "type": "string"
+    },
+    "drawing_number": {
+      "type": "string"
+    },
+    "dwelling": {
+      "type": "string"
+    },
+    "revisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "revision": {
+            "type": "string"
+          },
+          "linked_at": {
+            "type": "string"
+          },
+          "confirmed_by": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "linked_at",
+          "confirmed_by"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "readout_answer",
+              "flag_fix",
+              "correction"
+            ]
+          },
+          "text": {
+            "type": "string"
+          },
+          "applies_to": {
+            "type": "string"
+          },
+          "source_job": {
+            "type": "string"
+          },
+          "created": {
+            "type": "string"
+          },
+          "removed": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "applies_to",
+          "source_job",
+          "created",
+          "removed"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "project_key",
+    "drawing_number",
+    "dwelling",
+    "revisions",
+    "items"
+  ],
+  "additionalProperties": false
+}

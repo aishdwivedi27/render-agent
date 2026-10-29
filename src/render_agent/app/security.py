@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.responses import Response
 
-SERVED_DIRS = ("output", "references")
+SERVED_DIRS = ("output", "references", "plan")
 TOKEN_HEADER = "X-Session-Token"
 LOCAL_HOSTS = {"127.0.0.1", "localhost"}
 
@@ -57,7 +57,7 @@ def require_token(request: Request) -> None:
 
 
 def job_file(job_dir: Path, rel: str) -> Path | None:
-    """A file under the job's output/ or references/ folder, or None (no other path is served)."""
+    """A file under the job's output/, references/ or plan/ folder, or None (no other path is served)."""
     if not rel or rel.replace("\\", "/").split("/")[0] not in SERVED_DIRS:
         return None
     path = (job_dir / rel).resolve()

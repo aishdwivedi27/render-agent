@@ -57,11 +57,10 @@ def redact_yaml_value(v: Any) -> Any:
 
 
 def redact_file(src: Path) -> str:
-    text = src.read_text(encoding="utf-8")
     if src.suffix == ".md":
-        return f"<!-- {HEADER.strip()} -->\n" + redact_markdown(text)
+        return f"<!-- {HEADER.strip()} -->\n" + redact_markdown(src.read_text(encoding="utf-8"))
     if src.suffix in (".yaml", ".yml"):
-        data = yaml.safe_load(text)
+        data = yaml.safe_load(src.read_text(encoding="utf-8"))
         body = yaml.safe_dump(redact_yaml_value(data), sort_keys=False, allow_unicode=True)
         return f"# {HEADER}" + body
     return HEADER

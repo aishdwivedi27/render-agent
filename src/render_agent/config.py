@@ -35,7 +35,7 @@ from render_agent.errors import PermanentError
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*[a-z0-9]$")
 KEY_ENV_VARS = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "muapi": "MUAPI_API_KEY"}
 SECRET_ENV_VARS = (*KEY_ENV_VARS.values(), "SMTP_USERNAME", "SMTP_PASSWORD")
-READ_ONLY_PATHS = ("knowledge", "prompts", "schemas")  # resolved against the install root
+READ_ONLY_PATHS = ("knowledge", "prompts", "schemas", "engine", "assets")  # resolved against the install root
 APP_FOLDER = "RenderAgent"
 
 
@@ -61,6 +61,9 @@ class Paths(_Strict):
     schemas: Path
     logs: Path
     feedback: Path = Path("feedback")
+    memory: Path = Path("memory")  # project memory and agent rules (PLAN_VISUALS_SPEC section 13)
+    engine: Path = Path("private/engine")  # plan visuals: plan.js, still.js, three.js, glTF models
+    assets: Path = Path("private/assets")  # plan visuals: photo tops and the asset index
 
 
 class Watcher(_Strict):
@@ -129,6 +132,8 @@ class MuapiImages(_Strict):
 class Images(_Strict):
     provider: Literal["openai", "muapi", "mock"]
     enabled_providers: list[Literal["openai", "muapi"]] = Field(default=["openai"])
+    # listed on the approval screen (PLAN_VISUALS_SPEC section 12); the first is the default
+    offered_providers: list[Literal["openai", "muapi"]] = Field(default=["openai", "muapi"], min_length=1)
     openai: OpenAIImages
     muapi: MuapiImages
     references_per_render: int = Field(ge=0)
@@ -139,6 +144,25 @@ class Images(_Strict):
     concurrency: int = Field(ge=1)
     retries: int = Field(ge=0)
     max_images_per_round: int | None = Field(default=None, ge=1)  # M5.5 cap on paid calls per job run
+
+
+class TokenEstimate(_Strict):
+    input: int = Field(default=30000, ge=0)
+    output: int = Field(default=6000, ge=0)
+
+
+class Plans(_Strict):
+    """Plan visuals defaults (PLAN_VISUALS_SPEC section 12): names from llm.choices."""
+
+    readout_llm_default: str = "sonnet"
+    # tokens one readout of one floor-plan sheet is expected to use; with `pricing` this gives the
+    # estimated reading cost on "Start the plan check" (an estimate, never a bill)
+    readout_estimate_tokens: TokenEstimate = Field(default_factory=lambda: TokenEstimate())
+
+
+class Renders(_Strict):
+    prompt_writers_default: list[str] = Field(default=["sonnet", "gpt"])
+    check_llm_default: str = "gpt"
 
 
 class Planning(_Strict):
@@ -205,6 +229,8 @@ class Settings(_Strict):
     review: Review
     notify: Notify
     designer: Designer = Field(default_factory=Designer)
+    plans: Plans = Field(default_factory=Plans)
+    renders: Renders = Field(default_factory=Renders)
     pricing: dict[str, Price] = Field(default_factory=dict)  # model id -> prices, for the cost report
 
     root: Path = Field(exclude=True)
@@ -321,7 +347,26 @@ def load_config(root: Path | None = None, work: Path | None = None) -> Settings:
         ) from exc
     _check_provider_models(settings)
     _check_image_provider(settings)
+    _check_model_choices(settings)
     return settings
+
+
+def _check_model_choices(s: Settings) -> None:
+    """Default readout, prompt-writer and check models must be names from llm.choices."""
+    named = [("plans.readout_llm_default", s.plans.readout_llm_default)]
+    named += [("renders.prompt_writers_default", n) for n in s.renders.prompt_writers_default]
+    named += [("renders.check_llm_default", s.renders.check_llm_default)]
+    for setting, name in named:
+        if name not in s.llm.choices:
+            raise PermanentError(
+                code="CONFIG_INVALID",
+                what_happened=(
+                    f"Setting '{setting}' ('{name}') is not one of 'llm.choices' "
+                    f"({', '.join(sorted(s.llm.choices)) or 'none'})."
+                ),
+                likely_cause="A typo, or a model name that was removed from llm.choices.",
+                what_to_do=f"Set '{setting}' to a name listed under 'llm.choices' in config.yaml.",
+            )
 
 
 def _check_image_provider(s: Settings) -> None:

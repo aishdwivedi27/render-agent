@@ -1,0 +1,70 @@
+# Redacted copy: structure only. The real file is private and not in this repository.
+walls:
+  dark_below: <redacted>
+  min_wall_mm: <redacted>
+  raster_mm: <redacted>
+  max_fill_share: <redacted>
+  dot_max_mm: <redacted>
+  cluster_gap_mm: <redacted>
+areas:
+  tolerance: <redacted>
+  veneer_mm: <redacted>
+  raster_mm_per_px: <redacted>
+  footprint_max_gap_mm: <redacted>
+  schedule_labels:
+    living:
+    - <redacted>
+    garage:
+    - <redacted>
+    alfresco:
+    - <redacted>
+    porch:
+    - <redacted>
+    total:
+    - <redacted>
+  outdoor_zones:
+  - <redacted>
+  room_words:
+    garage:
+    - <redacted>
+    alfresco:
+    - <redacted>
+    porch:
+    - <redacted>
+floor_plan_words:
+- <redacted>
+snap_mm: <redacted>
+showers:
+  wet_room_words:
+  - <redacted>
+  bath_words:
+  - <redacted>
+  shower_words:
+  - <redacted>
+  question: <redacted>
+recesses:
+  robe:
+    min_depth_mm: <redacted>
+    max_depth_mm: <redacted>
+    where: <redacted>
+  shower_recess:
+    min_depth_mm: <redacted>
+    max_depth_mm: <redacted>
+    where: <redacted>
+  linen:
+    min_depth_mm: <redacted>
+    max_depth_mm: <redacted>
+    where: <redacted>
+  nib:
+    min_depth_mm: <redacted>
+    max_depth_mm: <redacted>
+    where: <redacted>
+clearance_label: <redacted>
+mirror_min_match: <redacted>
+overlay:
+  alpha: <redacted>
+  wall_colour: <redacted>
+  room_colour: <redacted>
+  clearance_colour: <redacted>
+  margin_mm: <redacted>
+  max_edge_px: <redacted>

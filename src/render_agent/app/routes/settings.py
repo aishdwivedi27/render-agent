@@ -31,9 +31,46 @@ def prefs(ctx: AppContext) -> dict[str, Any]:
         return {}
 
 
+MODEL_WORDS = {"anthropic": "Claude", "openai": "OpenAI"}
+IMAGE_WORDS = {"openai": "OpenAI", "muapi": "MuAPI"}
+
+
 def _shown(ctx: AppContext) -> list[str]:
-    """Only providers this installation uses: the LLM ones and the enabled image ones."""
-    return keys.needed_providers(ctx.settings)
+    """Providers this installation can use: the LLM ones, llm.choices and the offered image ones."""
+    return keys.settings_providers(ctx.settings)
+
+
+def _model_word(ctx: AppContext, choice: str) -> str:
+    c = ctx.settings.llm.choices.get(choice)
+    return MODEL_WORDS.get(c.provider, c.provider) if c else choice
+
+
+def defaults(ctx: AppContext) -> dict[str, Any]:
+    """Plan visuals defaults for new jobs, in plain words (PLAN_VISUALS_SPEC section 12)."""
+    s = ctx.settings
+    images = [IMAGE_WORDS.get(p, p) for p in s.images.offered_providers]
+    return {
+        "readout": _model_word(ctx, s.plans.readout_llm_default),
+        "prompt_writers": " + ".join(_model_word(ctx, n) for n in s.renders.prompt_writers_default),
+        "drawing_check": _model_word(ctx, s.renders.check_llm_default),
+        "images": images[0],
+        "images_also": images[1:],
+    }
+
+
+def _used_for(ctx: AppContext, name: str) -> str:
+    s = ctx.settings
+    choices = {c.provider for c in s.llm.choices.values()}
+    uses = (
+        ("reading drawings", name == s.llm.provider),
+        ("plan readout and render prompts", name in choices and name != s.llm.provider),
+        ("making images", name in s.images.enabled_providers),
+        (
+            "making images when chosen",
+            name in s.images.offered_providers and name not in s.images.enabled_providers,
+        ),
+    )
+    return ", ".join(x for x, ok in uses if ok) or "some stages"
 
 
 def _bad_provider(provider: str) -> HTTPException:
@@ -56,21 +93,14 @@ def get_settings(ctx: Ctx) -> dict[str, Any]:
                 "name": name,
                 "label": LABELS.get(name, name),
                 "has_key": keys.has_key(s, name),
-                "used_for": ", ".join(
-                    x
-                    for x, ok in (
-                        ("reading drawings", name == s.llm.provider),
-                        ("making images", name in s.images.enabled_providers),
-                    )
-                    if ok
-                )
-                or "some stages",
+                "used_for": _used_for(ctx, name),
             }
             for name in _shown(ctx)
         ],
         "llm_choices": sorted(s.llm.choices),
         "llm_choice": p.get("llm_choice") or "",
         "image_providers": keys.available_image_providers(s),
+        "defaults": defaults(ctx),
     }
 
 

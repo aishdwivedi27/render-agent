@@ -11,7 +11,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def _install(tmp_path, monkeypatch, key="sk-test-0123456789abcdef"):
-    shutil.copy(ROOT / "config.example.yaml", tmp_path / "config.yaml")
+    cfg = (ROOT / "config.example.yaml").read_text(encoding="utf-8")
+    for name in ("engine", "assets"):  # read-only plan engine files: the repo's own copy
+        cfg = cfg.replace(f"  {name}: private/{name}", f"  {name}: '{(ROOT / 'private' / name).as_posix()}'")
+    (tmp_path / "config.yaml").write_text(cfg, encoding="utf-8")
     for d in ("private/knowledge", "private/prompts", "schemas"):
         shutil.copytree(ROOT / d, tmp_path / d)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)

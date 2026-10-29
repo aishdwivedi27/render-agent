@@ -63,22 +63,26 @@ class Env:
         )
         self.client = TestClient(create_app(self.ctx))
         self.auto_views = True
+        self.auto_plan_start = True
         self.folders = designer.folders(self.settings)
 
     def post(self, url: str, body: object = None, **kw: object):
         return self.client.post(url, json=body, headers={TOKEN_HEADER: TOKEN}, **kw)
 
     def drain(self) -> None:
-        """Runs queued jobs; jobs at Choose views take the default ticks (unless auto_views is off)."""
+        """Runs queued jobs; jobs at Start the plan check take "Exterior renders only" and jobs at Choose
+        views take the default ticks (unless auto_plan_start / auto_views is off)."""
         self.ctx.worker.drain()
-        while self.auto_views:
-            waiting = [
-                j["id"]
-                for j in self.client.get("/api/home").json()["jobs"]
-                if j["status"] == "AWAITING_VIEWS"
+        while True:
+            jobs = self.client.get("/api/home").json()["jobs"]
+            starting = [
+                j["id"] for j in jobs if self.auto_plan_start and j["status"] == "AWAITING_PLAN_START"
             ]
-            if not waiting:
+            waiting = [j["id"] for j in jobs if self.auto_views and j["status"] == "AWAITING_VIEWS"]
+            if not starting and not waiting:
                 return
+            for job_id in starting:
+                self.post(f"/api/jobs/{job_id}/plan-start", {"plans_mode": "renders_only"})
             for job_id in waiting:
                 views = self.client.get(f"/api/jobs/{job_id}/views").json()["views"]
                 self.post(f"/api/jobs/{job_id}/views", {"views": [v["id"] for v in views if v["ticked"]]})
@@ -296,11 +300,12 @@ def test_files_are_served_only_from_the_jobs_output_and_references(env):
     assert env.client.get("/api/jobs/..%2F..%2Fconfig/file/output/x.png").status_code == 404
 
 
-def test_settings_never_returns_a_key_and_hides_providers_not_enabled(env, monkeypatch):
+def test_settings_never_returns_a_key_and_lists_only_configured_providers(env, monkeypatch):
     s = env.client.get("/api/settings").json()
     assert "sk-test-not-real" not in json.dumps(s)
-    assert [p["name"] for p in s["providers"]] == ["openai"]  # muapi is not enabled
-    assert env.post("/api/settings/test", {"provider": "muapi"}).status_code == 400
+    # llm.choices and images.offered_providers decide the list (PLAN_VISUALS_SPEC section 12)
+    assert [p["name"] for p in s["providers"]] == ["anthropic", "muapi", "openai"]
+    assert env.post("/api/settings/test", {"provider": "mock"}).status_code == 400
     saved = {}
     monkeypatch.setitem(keys.VALIDATORS, "openai", lambda k: None)
     monkeypatch.setattr(keys, "save_key", lambda var, value: saved.update({var: value}))
@@ -319,7 +324,7 @@ def test_settings_never_returns_a_key_and_hides_providers_not_enabled(env, monke
 def test_help_doctor_diagnostics_and_feedback_export(env):
     checks = env.client.get("/api/help/doctor").json()
     assert checks and all(c["level"] in ("OK", "Check this", "Problem") for c in checks)
-    assert not any("muapi" in c["text"].lower() or "API_KEY" in c["text"] for c in checks)
+    assert not any("muapi not on path" in c["text"].lower() or "API_KEY" in c["text"] for c in checks)
     text = env.client.get("/api/help/diagnostics").json()["text"]
     assert "sk-test-not-real" not in text and "Working folder" in text
     r = env.post("/api/help/export-feedback")
@@ -466,7 +471,7 @@ def test_reopening_the_app_resumes_queued_and_running_jobs(env):
     assert job_id in fresh.worker.resume_on_launch()
     fresh.worker.drain()
     assert (
-        load_job(env.settings.path("jobs") / job_id).state["status"] == "AWAITING_VIEWS"
+        load_job(env.settings.path("jobs") / job_id).state["status"] == "AWAITING_PLAN_START"
     )  # the first stop of an app job
 
 
@@ -635,7 +640,7 @@ def test_views_are_chosen_after_reading_then_planned_then_approved(env):
     assert (job["status"], job["screen"], job["step"], job["step_name"]) == (
         "AWAITING_VIEWS",
         "views",
-        2,
+        3,
         "Choose views",
     )
     jd = env.settings.path("jobs") / job_id
@@ -652,7 +657,7 @@ def test_views_are_chosen_after_reading_then_planned_then_approved(env):
     assert r.status_code == 200, r.json()
     env.drain()
     job = env.client.get(f"/api/jobs/{job_id}").json()
-    assert (job["status"], job["step"]) == ("AWAITING_APPROVAL", 3)
+    assert (job["status"], job["step"]) == ("AWAITING_APPROVAL", 4)
     a = env.client.get(f"/api/jobs/{job_id}/approval").json()
     planned = [x for xs in a["dwellings"].values() for x in xs]
     assert planned and not any(x["view"] in {"Kitchen", "Bedroom", "Ensuite", "Laundry"} for x in planned)
@@ -718,7 +723,7 @@ def test_finished_job_lands_in_completed_and_home_says_so(env):
     env.post(f"/api/jobs/{job_id}/review/continue")
     env.drain()
     job = env.client.get(f"/api/jobs/{job_id}").json()
-    assert job["status"] == "SUCCEEDED" and job["step"] == 6
+    assert job["status"] == "SUCCEEDED" and job["step"] == 7
     out = Path(job["output_folder"])
     assert out.parent == env.folders.output / "Completed"
     assert list(out.rglob("FINAL APPROVED/*.png"))

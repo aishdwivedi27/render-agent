@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from render_agent.pipeline.job import Job
-from render_agent.util.directives import parse_directives
+from render_agent.util.directives import parse_directives, with_directive_line
 from render_agent.util.fs import atomic_write_json, atomic_write_text
 from render_agent.validate.checklist_validator import qualifying_dwellings, requested_views
 from render_agent.validate.view_words import interpret
@@ -36,8 +36,7 @@ def is_chosen(job_dir: Path) -> bool:
 
 def with_views_line(text: str, line: str) -> str:
     """`text` with its @views lines replaced by `line` ('' removes them)."""
-    kept = [ln for ln in text.splitlines() if not ln.strip().lower().startswith("@views")]
-    return "\n".join([*kept, *([line] if line else [])]) + "\n"
+    return with_directive_line(text, "views", line)
 
 
 def _read(path: Path) -> Any:

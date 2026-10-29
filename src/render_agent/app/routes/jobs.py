@@ -17,6 +17,7 @@ from render_agent.app.security import job_file, require_token
 from render_agent.app.worker import find_job_dir
 from render_agent.errors import AgentError
 from render_agent.output.folders import names
+from render_agent.pipeline import plan_check, plan_start
 from render_agent.pipeline.job import STAGES, cancel_requested, load_job
 from render_agent.validate.checklist_validator import load_view_set
 
@@ -47,8 +48,9 @@ def progress(job_dir: Path, state: dict[str, Any]) -> Progress:
         total = len(prompts.get("renders", []))
         done = sum(1 for r in (index or {}).get("renders", {}).values() if r.get("status") != "pending")
         return Progress(done=min(done, total), total=total)
-    finished = sum(1 for n in STAGES if state["stages"].get(n, {}).get("status") == "done")
-    return Progress(done=finished, total=len(STAGES))
+    counted = [n for n in STAGES if state["stages"].get(n, {}).get("status") != "skipped"]
+    finished = sum(1 for n in counted if state["stages"].get(n, {}).get("status") == "done")
+    return Progress(done=finished, total=len(counted))
 
 
 def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
@@ -64,7 +66,7 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
         text = plain.status_text("CANCELLING")
     elif queued and queued > 0:
         text = plain.status_text("QUEUED")
-    elif queued == 0 and status not in ("AWAITING_VIEWS", "AWAITING_APPROVAL", "AWAITING_REVIEW"):
+    elif queued == 0 and not status.startswith("AWAITING_") and status != "PLAN_COMPLETE":
         text = plain.status_text("RUNNING")
     error = plain.error_of(job_dir) if status in RETRYABLE else None
     out = JobOut(
@@ -81,8 +83,12 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
         warnings=list(info.get("warnings") or []),
         updated=st.get("updated", ""),
         output_folder=info.get("output"),
+        coming=plain.coming_text(status),
+        readout=plan_start.readout_text(job_dir),
         **plain.step_of(stage, status),
     )
+    if status == "AWAITING_PLAN_CHECK" and out.screen == "coming" and not plan_check.seen(job_dir):
+        out.screen, out.coming = "plan_check", ""  # the trace comes first; its questions are PV3
     if full:
         out.progress = progress(job_dir, st)
         out.history_folder = info.get("history")
