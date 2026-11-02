@@ -10,10 +10,15 @@ the page (the rules are in knowledge/plan_trace.yaml, `openings`):
   with one line is a sliding door);
 - the text "csd" beside a break with no arc: a cavity slider;
 - an exterior break as wide as a garage door: a garage door;
+- a "2/1020 Bi-folds" label beside two or more touching breaks: one bi-fold door, not several sliders;
 - nothing across it: an open walkway (a dashed line only makes it an arch candidate, so Orange).
 
 A break that matches none of these, or more than one, is Orange and carries both readings. Window codes
 are the nearest code-shaped words on the outside; two or none is Orange.
+
+The sizes written on the drawing are checked against the gaps measured from the walls: a window code
+(15-18 is 1800 mm wide) and a door leaf size written beside a door (870 gives an opening near 930). A
+gap that disagrees by more than the rule's tolerance is Orange, and its evidence says by how much.
 """
 
 from __future__ import annotations
@@ -76,6 +81,8 @@ class Opening:
     features: Features
     code: str | None = None
     code_note: str | None = None
+    leaf_mm: int | None = None  # the door leaf size written beside it, when one is
+    size_check: str | None = None  # "matches" or "differs" when a written size was compared, else None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -94,6 +101,8 @@ class Opening:
             "swing_side": self.features.arc_side if self.kind == "hinged_door" else None,
             "code": self.code,
             "code_note": self.code_note,
+            "leaf_mm": self.leaf_mm,
+            "size_check": self.size_check,
         }
 
 
@@ -507,7 +516,140 @@ def read(
             op.evidence = rules.openings.evidence["sliding_door"].format_map(
                 _Safe({"gap_mm": str(round(g.width)), "code": op.code or "NOT FOUND"})
             )
+        if kind in ("window", "sliding_door") and op.code:
+            _check_code_width(op, rules)
+    found = merge_bifolds(found, words, rules)
+    check_leaf_sizes(found, words, rules)
     return found
+
+
+def _check_code_width(op: Opening, rules: TraceRules) -> None:
+    """A window code is height-width in hundreds of mm (15-18: 1800 wide): the measured gap must agree."""
+    code = (op.code or "").split()[0] if op.code else ""
+    if not re.match(rules.openings.code_pattern, code):
+        return
+    expected = int(code[3:5]) * 100
+    if abs(op.gap.width - expected) <= rules.openings.code_width_tol_mm:
+        op.size_check = "matches"
+        return
+    op.size_check = "differs"
+    op.confidence = UNSURE
+    op.evidence += rules.openings.size_evidence["window_code"].format(
+        code=op.code, expected=expected, gap_mm=round(op.gap.width)
+    )
+
+
+def check_leaf_sizes(found: list[Opening], words: list[Word], rules: TraceRules) -> None:
+    """A door leaf size written beside a door (870, 720, 1020) belongs to the nearest door-like break within
+    reach. The opening is the leaf plus a little (870 gives about 930); a break far from that cannot be
+    Green. Two different sizes within reach of one break are ambiguous and compare nothing."""
+    o = rules.openings
+    doors = [op for op in found if op.kind in ("hinged_door", "cavity_slider")]
+    sizes: dict[int, set[int]] = {}
+    for w in words:
+        if not re.fullmatch(r"\d{3,4}", w.text) or not o.leaf_min_mm <= int(w.text) <= o.leaf_max_mm:
+            continue
+        if not doors:
+            break
+        dist, n = min((distance_to_rect(w.centre, op.gap.frame), n) for n, op in enumerate(doors))
+        if dist <= o.leaf_search_mm:
+            sizes.setdefault(n, set()).add(int(w.text))
+    for n, values in sizes.items():
+        if len(values) != 1:
+            continue
+        op, leaf = doors[n], next(iter(values))
+        op.leaf_mm = leaf
+        if o.leaf_over_mm[0] <= op.gap.width - leaf <= o.leaf_over_mm[1]:
+            op.size_check = "matches"
+            continue
+        op.size_check = "differs"
+        op.confidence = UNSURE
+        op.evidence += o.size_evidence["door_leaf"].format(
+            leaf=leaf, expected=round(leaf + sum(o.leaf_over_mm) / 2), gap_mm=round(op.gap.width)
+        )
+
+
+BIFOLD_FROM = (
+    "cavity_slider",
+    "arch",
+)  # leaves are drawn as lines: never a clear door, never "nothing drawn"
+
+
+def _bifold_labels(words: list[Word], rules: TraceRules) -> list[tuple[Word, int, int]]:
+    """Bi-fold labels: a "2/1020" word (leaves / leaf size) with the word Bi-folds beside it."""
+    o = rules.openings
+    pattern = re.compile(o.bifold_pattern)
+    wanted = {w.upper() for w in o.bifold_words}
+    named = [(n.x0, n.y0, n.x1, n.y1) for n in words if n.text.upper() in wanted]
+    out = []
+    for w in words:
+        m = pattern.match(w.text)
+        if m and any(distance_to_rect(w.centre, box) <= o.bifold_label_mm for box in named):
+            out.append((w, int(m.group(1)), int(m.group(2))))
+    return out
+
+
+def _touching_runs(group: list[Opening], join: float) -> list[list[Opening]]:
+    """Groups of breaks chained together: each is within `join` of another in its group. Folding leaves are
+    not on one wall line (each pair of leaves is drawn as its own V), so only closeness counts."""
+    parent = list(range(len(group)))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i, a in enumerate(group):
+        for j in range(i + 1, len(group)):
+            if distance_to_rect(a.gap.centre, group[j].gap.frame) <= join + a.gap.width / 2:
+                parent[find(i)] = find(j)
+    runs: dict[int, list[Opening]] = {}
+    for i, op in enumerate(group):
+        runs.setdefault(find(i), []).append(op)
+    return list(runs.values())
+
+
+def merge_bifolds(found: list[Opening], words: list[Word], rules: TraceRules) -> list[Opening]:
+    """Each bi-fold label turns the two or more touching breaks beside it into one bi-fold door: a pair of
+    folding leaves is drawn as several short breaks in the wall, each of which reads as a slider."""
+    o = rules.openings
+    out = list(found)
+    for label, leaves, leaf in _bifold_labels(words, rules):
+        near = [
+            op
+            for op in out
+            if op.kind in BIFOLD_FROM
+            and op.confidence == UNSURE
+            and not op.gap.exterior
+            and distance_to_rect(label.centre, op.gap.frame) <= o.bifold_search_mm
+        ]
+        runs = [r for r in _touching_runs(near, o.bifold_join_mm) if len(r) >= 2]
+        if not runs:
+            continue
+        run = min(runs, key=lambda r: min(distance_to_rect(label.centre, op.gap.frame) for op in r))
+        frame = (
+            min(op.gap.frame[0] for op in run),
+            min(op.gap.frame[1] for op in run),
+            max(op.gap.frame[2] for op in run),
+            max(op.gap.frame[3] for op in run),
+        )
+        gap = Gap(frame, "h" if frame[2] - frame[0] >= frame[3] - frame[1] else "v")
+        merged = Opening(
+            f"O{round(gap.centre[0] / 10)}_{round(gap.centre[1] / 10)}",
+            "bifold_door",
+            None,
+            CLEAR,
+            o.evidence["bifold_door"].format(leaves=leaves, leaf=leaf, label=f"{leaves}/{leaf} Bi-folds"),
+            gap,
+            run[0].features,
+            leaf_mm=leaf,
+        )
+        ids = {id(op) for op in run}
+        at = min(i for i, op in enumerate(out) if id(op) in ids)
+        out = [op for op in out if id(op) not in ids]
+        out.insert(at, merged)
+    return out
 
 
 class _Safe(dict[str, str]):

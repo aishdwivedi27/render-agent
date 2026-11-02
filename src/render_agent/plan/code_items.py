@@ -53,23 +53,32 @@ def as_reading(
     out_rooms = []
     for r in code["rooms"]:
         label = r["name"]
+        zone = bool(r.get("shares_with"))
         item: dict[str, Any] = {
             "id": r["id"],
             "dwelling": "",
             "name": _name(r, rules),
             "outline": _frac(r["outline"], page_mm),
-            "evidence": tpl.evidence["room"].format(labels=label)
+            "evidence": tpl.evidence["room_zone"].format(labels=", ".join([label, *r["shares_with"]]))
+            if zone
+            else tpl.evidence["room"].format(labels=label)
             if label
             else tpl.evidence["room_unlabelled"],
-            "confidence": "GREEN" if label else "ORANGE",
+            "confidence": "GREEN" if label and not zone else "ORANGE",
             "alternative": None,
-            "question": None
+            "question": rules.readout.questions["zone"].format(
+                item=str(label).capitalize(), others=" and ".join(s.capitalize() for s in r["shares_with"])
+            )
+            if zone
+            else None
             if label
             else rules.readout.questions["unlabelled"].format(
                 between=" and ".join(between.get(r["id"], [])) or "its neighbours"
             ),
             "off_drawing_mm": off.get(r["id"], 0),
         }
+        if zone:
+            item["zone"] = True  # its cut is not a wall: the readout does not measure it to the walls
         out_rooms.append(item)
     by_opening = {c["opening"]: c for c in code["connections"]}
     out_open = []
@@ -120,7 +129,28 @@ def as_reading(
             "off_drawing_mm": r["off_drawing_mm"],
         }
         out_rec.append(item)
-    return {**base, "rooms": out_rooms, "openings": out_open, "recesses": out_rec}
+    fixtures = [
+        {
+            "id": k["id"],
+            "dwelling": "",
+            "type": k["type"],
+            "room": _name(names.get(k["room"]), rules),
+            "outline": _frac(_rect_poly(k["rect"]), page_mm),
+            "evidence": k["evidence"],
+            "confidence": LEVEL[k["confidence"].upper()],
+            "alternative": k["alternative"],
+            "question": None,
+            "off_drawing_mm": 0,
+        }
+        for k in code.get("kitchen", [])
+    ]
+    return {
+        **base,
+        "rooms": out_rooms,
+        "openings": out_open,
+        "recesses": out_rec,
+        "fixtures": [*base.get("fixtures", []), *fixtures],
+    }
 
 
 def tpl_end(rules: TraceRules, o: dict[str, Any]) -> str | None:

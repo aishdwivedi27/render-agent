@@ -143,7 +143,10 @@ def item_offsets(
     reach = rules.readout.overlay_tolerance_mm * 2
     out: dict[str, float] = {}
     for room in rooms:
-        out[room.id] = max((off_mm(vp, x, y, reach) for x, y in room.outline), default=0.0)
+        # a zone of an open space has a cut where no wall is drawn: only a walled room is measured
+        out[room.id] = (
+            0.0 if room.shares_with else max((off_mm(vp, x, y, reach) for x, y in room.outline), default=0.0)
+        )
     for op in openings:
         g = op.gap
         x0, y0, x1, y1 = g.frame

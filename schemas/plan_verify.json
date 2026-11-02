@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "plan_verify",
+  "description": "One overlay tile checked against the drawing (PLAN_VISUALS_SPEC section 3a): what the trace, rooms or openings drawn over the tile get wrong. Positions are fractions of the tile image (0-1, y down). A finding never changes the trace; it becomes an Orange row the designer answers.",
+  "type": "object",
+  "properties": {
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "wall_missing",
+              "wall_extra",
+              "opening_wrong",
+              "opening_missing",
+              "room_wrong",
+              "other"
+            ]
+          },
+          "at": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "minItems": 2,
+            "maxItems": 2
+          },
+          "item_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "what": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "at",
+          "item_id",
+          "what"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "notes": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "findings",
+    "notes"
+  ],
+  "additionalProperties": false
+}

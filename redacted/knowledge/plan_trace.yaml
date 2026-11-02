@@ -146,6 +146,18 @@ openings:
   - <redacted>
   code_search_mm: <redacted>
   door_code_height: <redacted>
+  code_width_tol_mm: <redacted>
+  leaf_min_mm: <redacted>
+  leaf_max_mm: <redacted>
+  leaf_search_mm: <redacted>
+  leaf_over_mm:
+  - <redacted>
+  bifold_pattern: <redacted>
+  bifold_words:
+  - <redacted>
+  bifold_label_mm: <redacted>
+  bifold_search_mm: <redacted>
+  bifold_join_mm: <redacted>
   ends:
     h:
     - <redacted>
@@ -169,6 +181,10 @@ openings:
     open_walkway_t: <redacted>
     exterior_nothing: <redacted>
     conflict: <redacted>
+    bifold_door: <redacted>
+  size_evidence:
+    window_code: <redacted>
+    door_leaf: <redacted>
 rooms:
   tidy_mm: <redacted>
   seal_mm: <redacted>
@@ -185,6 +201,8 @@ rooms:
     WIR: <redacted>
     WIP: <redacted>
   unlabelled_name: <redacted>
+  split_open_plan: true
+  split_min_area_m2: <redacted>
 overlay_check:
   margin_mm: <redacted>
   max_rows: <redacted>
@@ -196,6 +214,88 @@ overlay_check:
   evidence:
     missing: <redacted>
     extra: <redacted>
+angled:
+  min_steps: <redacted>
+  step_max_mm: <redacted>
+  min_run_mm: <redacted>
+  line_tol_mm: <redacted>
+  min_angle_deg: <redacted>
+  max_rows: <redacted>
+  question: <redacted>
+  evidence: <redacted>
+tiles:
+  enabled: true
+  px_mm: <redacted>
+  plan_margin_mm: <redacted>
+  tile_mm: <redacted>
+  overlap_mm: <redacted>
+  min_wall_mm: <redacted>
+  max_tiles: <redacted>
+  max_edge_px: <redacted>
+  send_plan_crop: true
+  plan_crop_max_edge_px: <redacted>
+  verify: true
+  max_findings: <redacted>
+  max_what_chars: <redacted>
+  finding_box_mm: <redacted>
+  wall_alpha: <redacted>
+  marker_colour: <redacted>
+  finding_kinds:
+    wall_missing: <redacted>
+    wall_extra: <redacted>
+    opening_wrong: <redacted>
+    opening_missing: <redacted>
+    room_wrong: <redacted>
+    other: <redacted>
+  question: <redacted>
+  verify_max_calls: <redacted>
+  focus:
+    enabled: true
+    px_mm: <redacted>
+    pad_mm: <redacted>
+    min_mm: <redacted>
+    max_mm: <redacted>
+    max_areas: <redacted>
+    link_max_area_m2: <redacted>
+    hotspots: true
+    llm: true
+    llm_max_areas: <redacted>
+    llm_question: <redacted>
+    groups:
+    - name: <redacted>
+      link: true
+      words:
+      - <redacted>
+kitchen:
+  zone_words:
+  - <redacted>
+  fridge_words:
+  - <redacted>
+  fridge_half_mm: <redacted>
+  dishwasher_words:
+  - <redacted>
+  provision_words:
+  - <redacted>
+  word_pair_mm: <redacted>
+  raster_mm_per_px: <redacted>
+  dark_below: <redacted>
+  wall_clear_mm: <redacted>
+  line_tol_mm: <redacted>
+  island_length_mm:
+  - <redacted>
+  island_depth_mm:
+  - <redacted>
+  island_clear_mm: <redacted>
+  against_wall_mm: <redacted>
+  evidence:
+    island: <redacted>
+    fridge: <redacted>
+    dishwasher: <redacted>
+  sides:
+    left: <redacted>
+    right: <redacted>
+    top: <redacted>
+    bottom: <redacted>
 clearance_label: <redacted>
 mirror_min_match: <redacted>
 overlay:
@@ -213,6 +313,8 @@ readout:
   main_kinds:
   - <redacted>
   other_title: <redacted>
+  kitchen_words:
+  - <redacted>
   scoring:
     unsure_takes_lower: true
     ambiguous_best_guess: <redacted>
@@ -232,9 +334,12 @@ readout:
       width: <redacted>
       wall_missing: <redacted>
       wall_extra: <redacted>
+      wall_angled: <redacted>
+      wall_check: <redacted>
     evidence:
       room: <redacted>
       room_unlabelled: <redacted>
+      room_zone: <redacted>
     sides:
       h:
       - <redacted>
@@ -243,6 +348,7 @@ readout:
   kind_labels:
     hinged_door: <redacted>
     cavity_slider: <redacted>
+    bifold_door: <redacted>
     sliding_door: <redacted>
     open_walkway: <redacted>
     arch: <redacted>
@@ -265,6 +371,7 @@ readout:
     unreadable: <redacted>
     unlabelled: <redacted>
     window_code: <redacted>
+    zone: <redacted>
   options:
     confirm: <redacted>
     alternative: <redacted>

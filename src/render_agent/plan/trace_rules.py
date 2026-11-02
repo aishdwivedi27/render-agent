@@ -116,9 +116,22 @@ class Openings(_Strict):
     code_suffixes: list[str]
     code_search_mm: float = Field(gt=0)
     door_code_height: int = Field(ge=1)
+    code_width_tol_mm: float = Field(ge=0)  # a window code's width and the measured gap may differ this much
+    leaf_min_mm: float = Field(
+        gt=0
+    )  # door leaf sizes written beside a door (870, 720, 1020) lie between these
+    leaf_max_mm: float = Field(gt=0)
+    leaf_search_mm: float = Field(gt=0)
+    leaf_over_mm: tuple[float, float]  # a door's opening is its leaf plus an amount in this range
+    bifold_pattern: str  # the label of a pair of bi-fold leaves: "2/1020"
+    bifold_words: list[str]
+    bifold_label_mm: float = Field(gt=0)  # the word "Bi-folds" is this close to the label
+    bifold_search_mm: float = Field(gt=0)  # gaps this close to a bi-fold label are its leaves
+    bifold_join_mm: float = Field(ge=0)  # leaves touch within this
     ends: dict[str, list[str]]
     sides: dict[str, list[str]]
     evidence: dict[str, str]
+    size_evidence: dict[str, str]
 
 
 class Rooms(_Strict):
@@ -130,6 +143,8 @@ class Rooms(_Strict):
     words: list[str] = Field(min_length=1)
     expand: dict[str, str]
     unlabelled_name: str = Field(min_length=1)
+    split_open_plan: bool  # one space with several labels is cut into a zone per label
+    split_min_area_m2: float = Field(ge=0)  # a zone smaller than this means the space stays whole
 
 
 class OverlayCheck(_Strict):
@@ -139,6 +154,90 @@ class OverlayCheck(_Strict):
     look_mm: float = Field(gt=0)
     questions: dict[str, str]
     evidence: dict[str, str]
+
+
+class Angled(_Strict):
+    """Walls drawn off square: a staircase of short raster steps along one straight line."""
+
+    min_steps: int = Field(ge=2)
+    step_max_mm: float = Field(gt=0)  # each step of the staircase is at most this tall (or wide)
+    min_run_mm: float = Field(gt=0)
+    line_tol_mm: float = Field(ge=0)  # the steps' midpoints lie this close to one straight line
+    min_angle_deg: float = Field(gt=0, lt=45)  # nearer than this to square is raster noise
+    max_rows: int = Field(ge=1)
+    question: str = Field(min_length=1)
+    evidence: str = Field(min_length=1)
+
+
+class FocusGroup(_Strict):
+    name: str = Field(min_length=1)
+    words: list[str] = Field(min_length=1)  # rooms whose name holds one of these belong to the group
+    link: bool  # small rooms joined to a member by a door (a vanity, a hall) belong to it too
+
+
+class Focus(_Strict):
+    """Close-up areas: rooms and openings that sit tightly together, cut at higher detail (section 3a)."""
+
+    enabled: bool
+    px_mm: float = Field(gt=0)  # detail of a close-up: mm per pixel
+    pad_mm: float = Field(ge=0)  # drawing kept around the group's rooms and their openings
+    min_mm: float = Field(gt=0)  # the crop is at least this big on each side
+    max_mm: float = Field(gt=0)
+    max_areas: int = Field(ge=1)
+    link_max_area_m2: float = Field(gt=0)
+    hotspots: bool  # items that are not Green and fall outside every group get an area of their own
+    groups: list[FocusGroup]
+    llm: bool  # a model also suggests where to look closer (plan_focus); code checks every box it returns
+    llm_max_areas: int = Field(ge=1)
+    llm_question: str = Field(min_length=1)
+
+
+class Tiles(_Strict):
+    """Cropped views of the plan for the readout model (PLAN_VISUALS_SPEC section 3a)."""
+
+    enabled: bool
+    px_mm: float = Field(gt=0)  # detail of a tile: mm per pixel (6.35 is 400 dpi at 1:100)
+    plan_margin_mm: float = Field(ge=0)  # drawing kept around the walls
+    tile_mm: float = Field(gt=0)  # side of a zone tile
+    overlap_mm: float = Field(ge=0)
+    min_wall_mm: float = Field(ge=0)  # a tile with less wall inside is not cut
+    max_tiles: int = Field(ge=1)
+    max_edge_px: int = Field(ge=400)  # longest edge of any tile or crop given to a model
+    send_plan_crop: bool  # the reading model also gets the plan cropped from the sheet, at more detail
+    plan_crop_max_edge_px: int = Field(ge=800)  # longest edge of that crop
+    verify: bool  # one model check per overlay tile (plan_verify)
+    max_findings: int = Field(ge=1)  # findings kept per tile
+    max_what_chars: int = Field(ge=20)  # characters of the model's sentence kept in a row
+    finding_box_mm: float = Field(gt=0)  # half-size of the box a finding highlights on the overlay
+    wall_alpha: float = Field(gt=0, le=1)
+    marker_colour: str = Field(pattern=HEX)
+    finding_kinds: dict[str, str]  # a finding kind the model may return -> the row wording
+    focus: Focus
+    verify_max_calls: int = Field(ge=1)  # model checks per dwelling (tiles and close-ups together)
+    question: str = Field(min_length=1)
+
+
+class Kitchen(_Strict):
+    """Kitchen detail read by code (PLAN_VISUALS_SPEC section 3b): the free-standing island, the fridge
+    space and the dishwasher provision in a kitchen or pantry zone. Cooktop and sink are drawn symbols the
+    readout model reads."""
+
+    zone_words: list[str] = Field(min_length=1)  # a zone whose name holds one of these is a kitchen zone
+    fridge_words: list[str]
+    fridge_half_mm: float = Field(gt=0)  # half-size of the box the fridge mark stands for
+    dishwasher_words: list[str]
+    provision_words: list[str]
+    word_pair_mm: float = Field(gt=0)  # "DW" and "PROV" this close are one label
+    raster_mm_per_px: float = Field(gt=0)
+    dark_below: int = Field(gt=0, le=255)
+    wall_clear_mm: float = Field(ge=0)  # ink this close to a wall is the wall's own, not joinery
+    line_tol_mm: float = Field(ge=0)  # the four edges of a box agree within this
+    island_length_mm: tuple[float, float]
+    island_depth_mm: tuple[float, float]
+    island_clear_mm: float = Field(ge=0)  # free all round: no wall within this of any side
+    against_wall_mm: float = Field(gt=0)  # an item this close to a wall is "against" it
+    evidence: dict[str, str]
+    sides: dict[str, str]  # probe direction -> the side's name as the table writes it
 
 
 class Overlay(_Strict):
@@ -161,6 +260,7 @@ QUESTIONS = (
     "unreadable",
     "unlabelled",
     "window_code",
+    "zone",
 )
 OPTIONS = ("confirm", "alternative", "use_model", "not_there", "schedule", "same", "different")
 
@@ -186,6 +286,7 @@ class Readout(_Strict):
     code_label: str = Field(min_length=1)
     main_kinds: list[str] = Field(min_length=1)
     other_title: str = Field(min_length=1)
+    kitchen_words: list[str] = Field(min_length=1)  # fixtures in rooms with these words join the main table
     scoring: Scoring
     templates: Templates
     kind_labels: dict[str, str]
@@ -219,6 +320,9 @@ class TraceRules(_Strict):
     clearance_label: str = Field(min_length=1)
     mirror_min_match: float = Field(gt=0, le=1)
     overlay: Overlay
+    angled: Angled
+    kitchen: Kitchen
+    tiles: Tiles
     readout: Readout
 
     def zone_of(self, room_name: str) -> str:

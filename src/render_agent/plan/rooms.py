@@ -3,8 +3,10 @@
 Every opening and every post-closed edge of an outdoor space is closed on the wall mask; each enclosed
 region of free space is then a space. Its outline is the region's contour, so its corners are the wall
 faces (no snapping). A region is named from the room-name text inside it (page words grouped by line); a
-region with several labels is one room named as labelled; one with none is "Unlabelled space" and the table
-asks the designer. Rules (word list, label spacing, smallest room) are in knowledge/plan_trace.yaml, `rooms`.
+region with several labels is one open space, cut into a zone per label (each zone takes the part of the space
+nearest its label: the cut is not a wall, so the table asks where each zone ends); one with none is
+"Unlabelled space" and the table asks the designer. Rules (word list, label spacing, smallest room) are
+in knowledge/plan_trace.yaml, `rooms`.
 """
 
 from __future__ import annotations
@@ -43,6 +45,9 @@ class Room:
     labels: list[str]
     outdoor: bool
     rects: list[Rect] = field(repr=False, default_factory=list)
+    shares_with: list[str] = field(
+        default_factory=list
+    )  # the other zones of the open space this one is part of
 
     @property
     def name(self) -> str | None:
@@ -66,6 +71,7 @@ class Room:
             "width_mm": round(x1 - x0),
             "depth_mm": round(y1 - y0),
             "outdoor": self.outdoor,
+            "shares_with": self.shares_with,
         }
 
 
@@ -154,6 +160,51 @@ def _grown_back(
     ]
 
 
+def _row_cells(xa: float, xb: float, y: float, centres: list[Point]) -> list[tuple[float, float, int]]:
+    """One row of free space from xa to xb cut into stretches, each given to the nearest label centre."""
+    cuts = [xa, xb]
+    for i, a in enumerate(centres):
+        for b in centres[i + 1 :]:
+            if a[0] != b[0]:
+                x = ((b[0] ** 2 + (y - b[1]) ** 2) - (a[0] ** 2 + (y - a[1]) ** 2)) / (2 * (b[0] - a[0]))
+                if xa < x < xb:
+                    cuts.append(x)
+    cuts.sort()
+    out: list[tuple[float, float, int]] = []
+    for lo, hi in zip(cuts, cuts[1:], strict=False):
+        mid = (lo + hi) / 2
+        owner = min(range(len(centres)), key=lambda i: (mid - centres[i][0]) ** 2 + (y - centres[i][1]) ** 2)
+        if out and out[-1][2] == owner:
+            out[-1] = (out[-1][0], hi, owner)
+        else:
+            out.append((lo, hi, owner))
+    return out
+
+
+def _zones(members: list[Rect], centres: list[Point], px: float) -> list[list[Rect]]:
+    """The free space of an open-plan room divided between its labels: each point goes to the nearest
+    label."""
+    x0 = min(r[0] for r in members)
+    y0 = min(r[1] for r in members)
+    w = int((max(r[2] for r in members) - x0) / px) + 2
+    h = int((max(r[3] for r in members) - y0) / px) + 2
+    masks = [Image.new("L", (w, h), 255) for _ in centres]
+    draws = [ImageDraw.Draw(m) for m in masks]
+    for r in members:
+        for row in range(round((r[1] - y0) / px), round((r[3] - y0) / px)):
+            for xa, xb, owner in _row_cells(r[0], r[2], y0 + (row + 0.5) * px, centres):
+                a, b = round((xa - x0) / px), round((xb - x0) / px) - 1
+                if b >= a:
+                    draws[owner].line([(a, row), (b, row)], fill=0)
+    return [
+        [
+            (a * px + x0, b * px + y0, c * px + x0, d * px + y0)
+            for a, b, c, d in vector_walls._rectangles(m.tobytes(), w, h)
+        ]
+        for m in masks
+    ]
+
+
 def read(
     vp: vector_walls.VectorPage,
     openings: list[Opening],
@@ -202,12 +253,62 @@ def read(
         mine.sort(key=lambda lb: (round(lb.centre[1] / 500), lb.centre[0]))
         room.labels = [lb.text for lb in mine]
         room.outdoor = any(z in lb for lb in room.labels for z in zone_words)
-        rooms.append(room)
+        parts = _open_plan_zones(room, mine, px, rules) if len(mine) > 1 and not room.outdoor else None
+        rooms.extend(parts or [room])
     rooms.sort(key=lambda r: (round(r.box()[1] / 1000), r.box()[0]))
     for room in rooms:
         x0, y0, x1, y1 = room.box()
         room.id = f"R{round((x0 + x1) / 20)}_{round((y0 + y1) / 20)}"
     return rooms
+
+
+def _open_plan_zones(room: Room, mine: list[Label], px: float, rules: TraceRules) -> list[Room] | None:
+    """One room per label when the space holds several (None: keep it whole, because a zone would be too
+    small to be a space of its own)."""
+    if not rules.rooms.split_open_plan:
+        return None
+    cells = _zones(room.rects, [lb.centre for lb in mine], px)
+    out: list[Room] = []
+    for lb, cell in zip(mine, cells, strict=True):
+        area = sum((r[2] - r[0]) * (r[3] - r[1]) for r in cell) / 1e6
+        # the cut between zones is a staircase on the pixel grid: keep every step, then straighten it
+        loops = [pts for pts, hole in vector_walls.outlines(cell, px, 0.0) if not hole]
+        if area < rules.rooms.split_min_area_m2 or not loops:
+            return None
+        out.append(
+            Room(
+                "",
+                _straighten(max(loops, key=_area), rules.rooms.tidy_mm),
+                area,
+                [lb.text],
+                False,
+                cell,
+                [o.text for o in mine if o is not lb],
+            )
+        )
+    return out
+
+
+def _rdp(pts: list[Point], tol: float) -> list[Point]:
+    """Douglas-Peucker: the points of an open run that keep it within `tol` of the original."""
+    if len(pts) < 3:
+        return pts
+    (ax, ay), (bx, by) = pts[0], pts[-1]
+    span = ((bx - ax) ** 2 + (by - ay) ** 2) ** 0.5 or 1.0
+    dist = [abs((bx - ax) * (ay - y) - (ax - x) * (by - ay)) / span for x, y in pts[1:-1]]
+    worst = max(range(len(dist)), key=dist.__getitem__)
+    if dist[worst] <= tol:
+        return [pts[0], pts[-1]]
+    return _rdp(pts[: worst + 2], tol)[:-1] + _rdp(pts[worst + 1 :], tol)
+
+
+def _straighten(pts: list[Point], tol: float) -> list[Point]:
+    """A closed outline with its staircases (a diagonal cut drawn in pixels) turned into straight lines."""
+    if len(pts) < 5:
+        return pts
+    far = max(range(len(pts)), key=lambda i: (pts[i][0] - pts[0][0]) ** 2 + (pts[i][1] - pts[0][1]) ** 2)
+    first, second = pts[: far + 1], [*pts[far:], pts[0]]
+    return _rdp(first, tol)[:-1] + _rdp(second, tol)[:-1]
 
 
 def _area(pts: list[Point]) -> float:

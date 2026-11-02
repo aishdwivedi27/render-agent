@@ -158,6 +158,7 @@
             "enum": [
               "hinged_door",
               "cavity_slider",
+              "bifold_door",
               "sliding_door",
               "open_walkway",
               "arch",

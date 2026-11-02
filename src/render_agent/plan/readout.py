@@ -198,7 +198,7 @@ def shape(
     centre = ((box[0] + box[2]) / 2, (box[1] + box[3]) / 2)
     off = 0.0
     outdoor = collection == "rooms" and rules.zone_of(str(item.get("name", ""))) in rules.areas.outdoor_zones
-    if walls and collection in ("rooms", "recesses") and not outdoor:
+    if walls and collection in ("rooms", "recesses") and not outdoor and not item.get("zone"):
         off = max(_corner_off(p, walls, openings or []) for p in poly)
     return {"poly": poly, "box": box, "centre": centre, "off": off}
 
@@ -291,7 +291,7 @@ def model_rows(
     readers = len(names) - (1 if labels.get(primary) == ro.code_label else 0)
     lab = {n: labels.get(n, n) for n in names}
     by_kind: dict[str, list[dict[str, Any]]] = {
-        k: [] for k in ("room", "connection", "recess", "window", "fixture")
+        k: [] for k in ("room", "kitchen", "connection", "recess", "window", "fixture")
     }
     page_gaps = gaps(readings[primary], page_mm)
     for coll in COLLECTIONS:
@@ -482,7 +482,14 @@ def model_rows(
                     },
                 )
                 by_kind[r["category"]].append(r)
-    return [r for k in ("room", "connection", "recess", "window", "fixture") for r in by_kind[k]]
+    for r in by_kind["fixture"][
+        :
+    ]:  # cooktop, sink, island, fridge in the kitchen: the main table, after the rooms
+        if any(w in r["item"].rsplit(" in ", 1)[-1].upper() for w in ro.kitchen_words):
+            by_kind["fixture"].remove(r)
+            r["category"] = "kitchen"
+            by_kind["kitchen"].append(r)
+    return [r for k in ("room", "kitchen", "connection", "recess", "window", "fixture") for r in by_kind[k]]
 
 
 def batch(dwelling_rows: list[tuple[str, dict[str, Any]]], size: int) -> list[tuple[str, dict[str, Any]]]:

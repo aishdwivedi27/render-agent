@@ -12,6 +12,8 @@
 
 {{SCALE}}
 
+{{DETAIL}}
+
 {{METHOD}}
 
 ## What to return

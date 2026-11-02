@@ -132,6 +132,76 @@ chosen, are all Green). This screen is the build confirmation (R4c):
   mirrored, at least `mirror_min_match` of the walls both ways) gets `mirror_of` and an Orange
   confirmation row ("Same as DWELLING 2, repeated"); its plan is reused once confirmed (PV3).
 
+## 3a. Cropped views, overlay check and written sizes (added 2 Nov 2026)
+
+Why: the readout model used to see one picture, the whole sheet, in which the plan is a fraction of the
+pixels. The Claude project reads the same drawings better because it works on cropped, high-detail views
+and checks its own overlay against the drawing. The agent now does the same, with code doing the
+cutting and measuring and the model only judging what it is shown. Rules are data in
+`private/knowledge/plan_trace.yaml` (`tiles`, `angled`, and `openings.*size*`/`bifold*`).
+
+- **Plan crop.** The plan's bounding box (traced walls plus `tiles.plan_margin_mm`) is cut from the sheet as
+  printed, at most `tiles.plan_crop_max_edge_px` long, and saved as `plan/page-N_plan.png`. It is attached to
+  the reading call after the page image; the prompt says which part of the sheet it shows and that every
+  position is still a fraction of the whole sheet. Vector pages with walls only.
+- **Zone tiles.** Per dwelling the plan box is cut into overlapping tiles (`tiles.tile_mm`,
+  `tiles.overlap_mm`, at most `tiles.max_tiles`, none with less than `tiles.min_wall_mm` of wall) at
+  `tiles.px_mm` per pixel (6.35 = 400 dpi at 1:100). Each is saved twice under `plan/<dwelling>/tiles/`:
+  `tile-N.png` as printed (text kept) and `tile-N_overlay.png` with the traced walls (50%), room outlines
+  with names and openings as boxes with their ids; `tiles.json` lists them with their boxes in mm.
+- **Overlay check (`plan_verify`, one call per tile).** The model gets both images, the scale and the
+  overlay items inside the tile, and reports only where the overlay and the drawing differ
+  (`schemas/plan_verify.json`: kind, position as tile fractions, item id, one sentence). Code converts each
+  finding to the page, merges the same finding seen from two overlapping tiles, keeps at most
+  `tiles.max_findings` per tile and writes one Orange WALL row with a question. A finding never edits the
+  trace and never lowers or raises another row: a model can add questions, not change answers. Cached per
+  tile by the content of the images and prompt (Retry never pays twice). `tiles.verify: false` turns the
+  calls off; the tiles are still written.
+- **Close-ups (added 3 Nov 2026).** Rooms and openings that sit tightly together are cut out at higher detail
+  (`tiles.focus.px_mm`, 3.5 mm per pixel) with the trace drawn over the original, and each close-up is checked
+  by the same `plan_verify` call as a tile (close-ups first, at most `tiles.verify_max_calls` calls per
+  dwelling). Saved as `focus-N.png` and `focus-N_overlay.png` beside the tiles, listed in `tiles.json` under
+  `focus` with a title, the reason and the item ids. Where to cut comes from three places: (1) the groups in
+  `tiles.focus.groups` (wet rooms, vanity and WC; ensuite, walk-in robe and main bedroom; kitchen, pantry and
+  living; garage, mud room and laundry entrances; alfresco, porch and entry): every room whose name holds a
+  group word, each cluster joined by a door or a shared wall on its own, with, for `link` groups, the small
+  rooms a door joins to them (a vanity, up to `link_max_area_m2`) and the openings in their walls; (2)
+  hotspots: items that are not Green and fall in no area, clustered by closeness; (3) optionally a model
+  (`plan_focus`, one call per dwelling, `tiles.focus.llm`) shown the whole plan with the overlay, which names
+  areas worth a closer look (`schemas/plan_focus.json`: name, box as fractions, reason, item ids). Code checks
+  every box (inside the plan, widened to `min_mm`, cut to `max_mm`, at most `llm_max_areas`); the model can
+  only add close-ups. Areas lying mostly inside an earlier one are dropped; at most `max_areas`.
+- **Angled walls.** Axis-aligned wall rectangles turn an angled wall into a staircase of short steps on one
+  line; `plan/angled.py` finds them (`angled.*`) and writes an Orange WALL row `wall_angled_...` with the
+  length and angle. The trace is not reshaped: geometry stays square-cornered and the designer is asked.
+- **Written sizes.** A window code (15-18 is 1800 wide) and a door leaf size written beside a door (870 gives
+  an opening of about 930, `openings.leaf_over_mm`) are compared with the gap measured from the walls.
+  A gap off by more than `openings.code_width_tol_mm` / `leaf_over_mm` is Orange and its evidence says by
+  how much; `code_reading.json` openings carry `leaf_mm` and `size_check`.
+- **Bi-folds.** Two or more unsure slider/arch breaks near a "2/1020" label with the word "Bi-folds" become
+  one `bifold_door` (Green), because folding leaves are drawn as short breaks, not one gap.
+- Reference check: `python scripts/compare_reference.py fixture4a fixture4b` and
+  `docs/parity/fixture4a.md` / `fixture4b.md`.
+
+## 3b. Open-plan zones and kitchen detail (added 3 Nov 2026)
+
+The first-pass reference tables list Family & Meals, Kitchen and WIP (and, in the other drawings, Family, Kitchen
+and Dining) as separate items with the kitchen's joinery described, so the code reading does too.
+
+- **Zones.** A space with several room labels is no longer one room named "A, B, C". Each point of the space goes
+  to the nearest label (`rooms.split_open_plan`); each label's part is a zone with its own outline (the cut
+  straightened to a line), area, connections and recesses. A zone carries `shares_with`, is always Orange and
+  asks "{item} shares one open space with {others}, and no wall divides them. Where does {item} end?" The cut is
+  halfway between the labels, so a zone's size is approximate: it is not measured to the walls and is not
+  checked against them. If any zone would be under `split_min_area_m2` the space stays whole.
+- **Kitchen detail by code** (`plan/kitchen.py`, `kitchen.*`), in zones whose name holds a kitchen word: the
+  island (a free-standing box of four drawn lines, edges agreeing within `line_tol_mm`, no wall within
+  `island_clear_mm`, with the words written inside it), the fridge space (the mark "F"), a dishwasher provision
+  ("DW PROV"), each with where it stands against the walls. The cooktop and the sink are drawn symbols: the
+  readout models read them as fixtures (`prompts/plan_trace.md`).
+- **Table.** Fixtures in a kitchen or pantry room (`readout.kitchen_words`) are category "kitchen": rows of the
+  main table straight after the rooms. What only one reader found is asked, as for any item.
+
 ## 4. Readout table and questions (gate_plan_check, gate_elevation_check)
 
 - Rows: scale, each room, each connection, each recess or niche, each window, each fixed fixture, each
@@ -407,6 +477,9 @@ flag rounds come on top.
 - Memory file unreadable → job continues without it, warning on the job.
 - Photoreal enhance below the match threshold twice → code-drawn Showcase kept, reason shown, no further
   paid attempts.
+- A tile the model cannot check (answer invalid, vendor error) → that tile is skipped, a note on the check
+  screen says which part was not model-checked, the plan check still opens; a key or credit problem pauses
+  the job as for the reading call (`test_pv4_tiles_app.py`).
 - Render reference crop missing for an interior view → rebuilt from the lock before s6; if that fails the
   view falls back to the drawing crop with the reason in prompts/index.json.
 

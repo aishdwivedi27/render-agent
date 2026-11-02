@@ -89,6 +89,14 @@ def test_prompt_placeholders_are_known():
         "RULES",
         "RECESS_RULES",
         "DWELLINGS",
+        "DETAIL",
+        # plan_verify.md (also uses SCALE, ITEMS and RULES)
+        "TILE",
+        "MAX",
+        "KINDS",
+        # plan_focus.md (also uses SCALE, MAX and ITEMS)
+        "MIN",
+        "CHOSEN",
         # plan_reread.md
         "ITEMS",
         "ANSWERS",

@@ -43,16 +43,19 @@ from render_agent.plan import (
     areas,
     code_items,
     code_reading,
+    focus,
     geometry,
     overlay,
     readout,
     readout_table,
     rows,
+    tiles,
     vector_walls,
+    verify,
 )
-from render_agent.plan.source import ImageSource, PdfSource, Source, Word, page_words
+from render_agent.plan.source import ImageSource, PdfSource, PdfView, Source, Word, page_words
 from render_agent.plan.trace_rules import TraceRules, load_trace_rules
-from render_agent.util.fs import atomic_write_json, atomic_write_text, safe_name
+from render_agent.util.fs import atomic_write_bytes, atomic_write_json, atomic_write_text, safe_name
 from render_agent.util.prompts import load_prompt, quote_block, render
 
 if TYPE_CHECKING:
@@ -68,6 +71,13 @@ MIN_VECTOR_WALLS = 8  # fewer wall pieces than this: the page is treated as havi
 REGION_PAD_MM = 300.0  # walls on the edge of a single dwelling's box still belong to it
 PROVIDER_LABEL = {"anthropic": "Claude", "openai": "OpenAI"}
 NO_VECTOR_NOTE = "No vector walls were found on page {page}: the walls were traced by {model} from the image."
+DETAIL_NOTE = (
+    "A second image is attached: the plan cut from the sheet at more detail (it shows "
+    "x {x0:.3f} to {x1:.3f}, "
+    "y {y0:.3f} to {y1:.3f} of the sheet). Report every position as a fraction of the WHOLE sheet (the first "
+    "image), never of this detail view."
+)
+VERIFY_NOTE = "{model} could not check {tile} of {dwelling}: that part of the plan was not model-checked."
 
 
 def _plan_pages(
@@ -166,6 +176,7 @@ def _prompt(
     vector: bool,
     rules: TraceRules,
     code_items: str = "",
+    detail: str = "",
 ) -> str:
     knowledge = ctx.settings.path("knowledge")
     standards = "\n\n".join(
@@ -185,6 +196,7 @@ def _prompt(
             "SCALE": f"The drawing scale is 1:{ratio}."
             if ratio
             else "No scale was found; read it if it is drawn.",
+            "DETAIL": detail,
             "METHOD": (
                 "The walls on this page are traced by code from the drawing's vector lines. Return an empty "
                 "`walls` list."
@@ -205,9 +217,10 @@ def _prompt(
 
 
 def _read(
-    ctx: RunContext, names: list[str], page: dict[str, Any], prompt: str
+    ctx: RunContext, names: list[str], page: dict[str, Any], prompt: str, extra: list[Path] | None = None
 ) -> tuple[dict[str, dict[str, Any]], dict[str, AgentError]]:
-    """Each model's reading of the page (cached), and the models that failed."""
+    """Each model's reading of the page (cached), and the models that failed. `extra` images (the plan cut
+    from the sheet) follow the page image."""
     schema = load_schema(ctx, STAGE)
     readings: dict[str, dict[str, Any]] = {}
     failed: dict[str, AgentError] = {}
@@ -218,7 +231,11 @@ def _read(
             continue
         try:
             reading = _llm(ctx, name).call_json(
-                f"{STAGE}.{name}.page-{page['page']}", prompt, [ctx.job.dir / page["image"]], schema, STAGE
+                f"{STAGE}.{name}.page-{page['page']}",
+                prompt,
+                [ctx.job.dir / page["image"], *(extra or [])],
+                schema,
+                STAGE,
             )
         except PauseJobError:
             raise  # out of credit or a key problem: the person fixes it, then Retry
@@ -345,6 +362,118 @@ def _code_reading(
     return reading
 
 
+def _plan_crop(
+    ctx: RunContext,
+    rules: TraceRules,
+    page: dict[str, Any],
+    pdf: Path,
+    ratio: int,
+    vp: vector_walls.VectorPage,
+    page_mm: geometry.Point,
+) -> tuple[list[Path], str]:
+    """The plan cut from the sheet at more detail, for the reading model: the sheet is mostly title block
+    and margin, so the plan on it is small. Returns the image (saved under plan/) and the prompt text that
+    says which part of the sheet it shows; nothing when the page has no vector walls to find the plan by."""
+    t = rules.tiles
+    if not (t.enabled and t.send_plan_crop) or page["scanned"] or len(vp.walls) < MIN_VECTOR_WALLS:
+        return [], ""
+    box = tiles.plan_box(vp.walls, rules, page_mm)
+    if box is None:
+        return [], ""
+    dest = ctx.job.dir / "plan" / f"page-{page['page']}_plan.png"
+    if not dest.is_file():
+        with PdfView(pdf, page["source_page"], ratio) as view:
+            img, _px = tiles.render(view, box, rules, t.plan_crop_max_edge_px)
+        atomic_write_bytes(dest, tiles.png_bytes(img))
+    note = DETAIL_NOTE.format(
+        x0=box[0] / page_mm[0], x1=box[2] / page_mm[0], y0=box[1] / page_mm[1], y1=box[3] / page_mm[1]
+    )
+    return [dest], note
+
+
+def _tile_checks(
+    ctx: RunContext,
+    rules: TraceRules,
+    page: dict[str, Any],
+    pdf: Path,
+    ratio: int | None,
+    walls: list[geometry.Rect],
+    code_json: dict[str, Any],
+    page_mm: geometry.Point,
+    mm_per_px: float,
+    folder: Path,
+    model: str,
+    dwelling: str,
+    summary: dict[str, Any],
+) -> tuple[list[dict[str, Any]], int]:
+    """Cuts the dwelling's plan into high-detail tiles with the traced overlay drawn on each (plan/<dwelling>/
+    tiles/), has the model compare each overlay with the drawing, and returns the Orange rows for what it
+    reports. The trace itself is never changed by it. Returns (rows, tiles cut)."""
+    t = rules.tiles
+    box = tiles.plan_box(walls, rules, page_mm) if t.enabled else None
+    if box is None:
+        return [], 0
+    view: Source = (
+        ImageSource(Image.open(ctx.job.dir / page["image"]), mm_per_px)
+        if page["scanned"]
+        else PdfView(pdf, page["source_page"], ratio or 100)
+    )
+    llm = _llm(ctx, model, verify.STAGE)
+    with view:  # type: ignore[attr-defined]
+        index = tiles.write(folder / "tiles", view, box, walls, code_json, rules)
+        close_ups = _focus_areas(ctx, rules, view, llm, model, ratio, box, walls, code_json, folder / "tiles")
+        tiles.write_focus(folder / "tiles", view, index, close_ups, walls, code_json, rules)
+    count = len(index["tiles"]) + len(index["focus"])
+    if not t.verify or not count:
+        return [], count
+    schema = load_schema(ctx, verify.STAGE)
+    checked = []
+    for entry in [*index["focus"], *index["tiles"]][: t.verify_max_calls]:  # close-ups first
+        items = tiles.items_in(code_json, tuple(entry["box_mm"]))  # type: ignore[arg-type]
+        prompt = verify.build_prompt(
+            ctx.settings.path("prompts"), ctx.settings.path("knowledge"), entry, ratio, items, rules
+        )
+        got = verify.check_tile(llm, model, schema, folder / "tiles", entry, prompt)
+        if got is None:
+            summary["notes"].append(
+                VERIFY_NOTE.format(model=model_label(ctx, model), tile=entry["name"], dwelling=dwelling)
+            )
+            continue
+        checked.append((entry, got))
+    return verify.finding_rows(checked, rules), count
+
+
+def _focus_areas(
+    ctx: RunContext,
+    rules: TraceRules,
+    view: Source,
+    llm: Any,
+    model: str,
+    ratio: int | None,
+    box: geometry.Rect,
+    walls: list[geometry.Rect],
+    code_json: dict[str, Any],
+    folder: Path,
+) -> list[focus.Area]:
+    """Where to cut close-ups: the rule groups, then (when the rules ask for it) what the model suggests after
+    seeing the whole plan with the overlay, then the items nobody else covers. Code checks every box."""
+    f = rules.tiles.focus
+    if not f.enabled:
+        return []
+    areas = focus.group_areas(code_json, box, rules)
+    if f.llm and rules.tiles.verify:
+        image, px = tiles.render(view, box, rules, rules.tiles.plan_crop_max_edge_px)
+        overview = folder / "overview_overlay.png"
+        atomic_write_bytes(overview, tiles.png_bytes(tiles.overlay(image, box, px, walls, code_json, rules)))
+        prompt = focus.model_prompt(ctx.settings.path("prompts"), box, code_json, areas, ratio, rules)
+        areas += focus.ask_model(
+            llm, model, load_schema(ctx, focus.STAGE), folder, overview, prompt, box, rules
+        )
+    if f.hotspots:
+        areas += focus.hotspot_areas(code_json, box, rules, areas)
+    return focus.merge(areas, rules)
+
+
 def _label_dwellings(
     reading: dict[str, Any], found: list[dict[str, Any]], whole: geometry.Rect, page_mm: geometry.Point
 ) -> None:
@@ -456,11 +585,15 @@ def run(ctx: RunContext) -> str:
         usable = len(vp.walls) >= MIN_VECTOR_WALLS
         # code reads the page first (when it has walls to read) and the models are shown its items
         code_all = _code_reading(ctx, rules, page, vp, pdf, ratio or 100, mm_per_px) if usable else None
+        detail_images, detail = (
+            _plan_crop(ctx, rules, page, pdf, ratio or 100, vp, page_mm) if usable else ([], "")
+        )
         readings, failed = _read(
             ctx,
             names,
             page,
-            _prompt(ctx, page, ratio, vector, rules, _code_block(code_all, page_mm)),
+            _prompt(ctx, page, ratio, vector, rules, _code_block(code_all, page_mm), detail),
+            detail_images,
         )
         primary = next(nm for nm in names if nm in readings)
         page_answers = [a for a in answers if a.get("page") == n]
@@ -557,6 +690,23 @@ def run(ctx: RunContext) -> str:
             geo["area_check"] = {"tolerance": rules.areas.tolerance, "results": results}
             answered = readout.latest(page_answers, d["id"])
             code_json = code_reading.for_region(code_all, padded if len(found) > 1 else None)
+            slug = safe_name(d["id"].lower().replace(" ", "-"), 40)
+            folder = job.dir / "plan" / slug
+            tile_rows, tile_count = _tile_checks(
+                ctx,
+                rules,
+                page,
+                pdf,
+                ratio,
+                dwalls,
+                code_json,
+                page_mm,
+                factor * 72 / info.get("dpi", 150),
+                folder,
+                primary,
+                d["id"],
+                summary,
+            )
             drows = [
                 page_rows["scale"],
                 *readout.model_rows(
@@ -572,6 +722,7 @@ def run(ctx: RunContext) -> str:
                     rules,
                 ),
                 *rows.wall_rows(code_json["wall_rows"], rules),
+                *tile_rows,
                 *rows.clearance_rows(geo, rules),
                 *rows.area_rows(results, rules.areas.tolerance, rules),
                 *rows.shower_rows(geo, rules),
@@ -589,8 +740,6 @@ def run(ctx: RunContext) -> str:
             drows = rows.assign_tables(readout.finalize(drows, answered), rules)
             traced.append((d["id"], dwalls))
             jsonschema.validate(geo, schema)
-            slug = safe_name(d["id"].lower().replace(" ", "-"), 40)
-            folder = job.dir / "plan" / slug
             folder.mkdir(parents=True, exist_ok=True)
             atomic_write_json(folder / "geometry.json", geo)
             jsonschema.validate(code_json, code_schema)
@@ -620,6 +769,7 @@ def run(ctx: RunContext) -> str:
                     "mirror": mirror,
                     "rooms": len(geo["rooms"]),
                     "walls": len(geo["walls"]),
+                    "tiles": tile_count,  # tiles and close-ups cut
                 }
             )
     atomic_write_json(job.dir / ARTIFACT, summary)

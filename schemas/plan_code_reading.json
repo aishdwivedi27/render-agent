@@ -44,6 +44,13 @@
           },
           "outdoor": {
             "type": "boolean"
+          },
+          "shares_with": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The other zones of the open space this room is one part of (empty for a room walled in on its own)"
           }
         },
         "required": [
@@ -54,7 +61,8 @@
           "area_m2",
           "width_mm",
           "depth_mm",
-          "outdoor"
+          "outdoor",
+          "shares_with"
         ],
         "additionalProperties": false
       }
@@ -135,6 +143,23 @@
           },
           "off_drawing_mm": {
             "type": "integer"
+          },
+          "leaf_mm": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "size_check": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "matches",
+              "differs",
+              null
+            ]
           }
         },
         "required": [
@@ -154,7 +179,9 @@
           "code",
           "code_note",
           "rooms",
-          "off_drawing_mm"
+          "off_drawing_mm",
+          "leaf_mm",
+          "size_check"
         ],
         "additionalProperties": false
       }
@@ -332,6 +359,52 @@
         ],
         "additionalProperties": false
       }
+    },
+    "kitchen": {
+      "type": "array",
+      "description": "Kitchen detail read by code: island, fridge space, dishwasher provision (rect in mm, page frame)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "rect": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "room": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "rect",
+          "room",
+          "evidence",
+          "confidence",
+          "alternative"
+        ],
+        "additionalProperties": false
+      }
     }
   },
   "required": [
@@ -341,7 +414,8 @@
     "wall_rows",
     "connections",
     "unlabelled",
-    "room_offsets"
+    "room_offsets",
+    "kitchen"
   ],
   "additionalProperties": false
 }

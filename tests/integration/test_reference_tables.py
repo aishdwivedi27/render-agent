@@ -169,13 +169,49 @@ def test_4b_extras_stay_few(results):
     assert got["walkways"] - want["walkways"] <= 2
 
 
+def test_4b_the_laundry_bifold_is_one_door_not_sliders(results):
+    (found, _) = results
+    page = found["fixture4b"]["page"]
+    (bifold,) = [o for o in page["openings"] if o["kind"] == "bifold_door"]
+    assert bifold["leaf_mm"] == 1020 and bifold["confidence"] == "clear"
+    assert "2/1020 Bi-folds" in bifold["evidence"]
+    assert "2 leaves of 1020 mm" in bifold["evidence"]  # the written size, not a measured gap
+    # the bi-fold's leaves no longer count as sliders (before: 4 sliders besides the csd door)
+    assert found["fixture4b"]["found"]["cavity_arch"] <= 3
+
+
+def test_written_sizes_agree_with_the_measured_gaps_on_both_drawings(results):
+    """Window codes (15-18 is 1800 wide) and door leaf sizes (870 gives ~930) were all read from the
+    drawing and none disagrees with the gap measured from the walls: a disagreement would be Orange."""
+    (found, _) = results
+    for name in ("fixture4a", "fixture4b"):
+        checks = found[name]["found"]["size_checks"]
+        assert checks["matches"] >= 20 and checks["differs"] == 0, name
+
+
+def test_no_angled_wall_is_invented_on_square_drawings(results):
+    (found, _) = results
+    for name in ("fixture4a", "fixture4b"):
+        assert not [w for w in found[name]["page"]["wall_rows"] if w["kind"] == "angled"], name
+
+
+def test_the_code_reading_still_fits_its_schema_with_the_new_fields(results):
+    import json
+
+    import jsonschema
+
+    (found, _) = results
+    schema = json.loads((ROOT / "schemas" / "plan_code_reading.json").read_text(encoding="utf-8"))
+    for name in ("fixture4a", "fixture4b"):
+        jsonschema.validate(found[name]["page"], schema)
+
+
 def test_code_names_the_rooms_the_table_names(results):
     (found, _) = results
     names_a = {r["name"] for r in found["fixture4a"]["page"]["rooms"] if r["name"]}
     assert {"BED 1", "BED 2", "BED 3", "BED 4", "LAUNDRY", "BATH", "ENSUITE", "LOUNGE", "PDR"} <= names_a
-    assert any(
-        "FAMILY" in n and "DINING" in n and "KITCHEN" in n for n in names_a
-    )  # the open plan is one room
+    # the table lists Family, Kitchen and Dining as separate items, so the open plan is a zone per label
+    assert {"FAMILY", "KITCHEN", "DINING"} <= names_a
     names_b = {r["name"] for r in found["fixture4b"]["page"]["rooms"] if r["name"]}
     assert {"BED 1", "BED 2", "BED 3", "LAUNDRY", "BATH", "ENSUITE"} <= names_b
 
@@ -243,3 +279,66 @@ def test_fixture_03_csd_belongs_to_the_dashed_gap_and_the_leaf_line_gap_is_orang
     ]
     assert any(abs(o["width_mm"] - 890) <= 60 for o in leaf)
     assert all("One line across" in o["evidence"] for o in leaf)
+
+
+# --- kitchen detail: the open plan is split and the kitchen's joinery is read ------------------------------
+def _zone(page, name):
+    return next(r for r in page["rooms"] if r["name"] == name)
+
+
+def test_4a_open_plan_zones_each_know_who_they_share_with_and_nothing_else_does(results):
+    (found, _) = results
+    page = found["fixture4a"]["page"]
+    family, kitchen, dining = (_zone(page, n) for n in ("FAMILY", "KITCHEN", "DINING"))
+    assert set(family["shares_with"]) == {"KITCHEN", "DINING"} and set(kitchen["shares_with"]) == {
+        "FAMILY",
+        "DINING",
+    }
+    assert dining["shares_with"] == ["FAMILY", "KITCHEN"] or set(dining["shares_with"]) == {
+        "FAMILY",
+        "KITCHEN",
+    }
+    walled = [r for r in page["rooms"] if r["name"] in ("BED 1", "BED 2", "BATH", "LAUNDRY", "ENSUITE")]
+    assert walled and all(r["shares_with"] == [] for r in walled)  # a walled room is not a zone
+
+
+def test_4a_kitchen_island_is_read_from_the_drawing(results):
+    (found, _) = results
+    (island,) = [k for k in found["fixture4a"]["page"]["kitchen"] if k["type"] == "ISLAND"]
+    x0, y0, x1, y1 = island["rect"]
+    # the table: "3.56 x 1.10 m island with sink"
+    assert sorted((x1 - x0, y1 - y0)) == pytest.approx([1100, 3560], abs=120)
+    assert "free-standing" in island["evidence"] and island["confidence"] == "clear"
+
+
+def test_4b_fridge_and_dishwasher_are_marked_in_the_kitchen(results):
+    (found, _) = results
+    kitchen = found["fixture4b"]["page"]["kitchen"]
+    # the table: "sink, DW provision, cooktop/UB oven, fridge space F" in D1's kitchen
+    kinds = {k["type"] for k in kitchen}
+    assert {"DISHWASHER PROVISION", "FRIDGE SPACE"} <= kinds
+    fridge = next(k for k in kitchen if k["type"] == "FRIDGE SPACE")
+    assert fridge["confidence"] == "unsure"  # a letter on the plan: the size of the space is not drawn
+    assert "against" in fridge["evidence"] or "mm from" in fridge["evidence"]  # where it stands is measured
+
+
+def test_4b_the_kitchens_are_zones_of_their_dwellings(results):
+    (found, _) = results
+    zones = [r for r in found["fixture4b"]["page"]["rooms"] if r["name"] in ("KITCHEN", "DINING")]
+    assert len(zones) == 4 and all(r["shares_with"] for r in zones)  # a kitchen and a dining zone in each
+
+
+def test_fixture_03_kitchen_is_split_from_family_and_the_pantry(f3):
+    page = f3["page"]
+    names = {r["name"] for r in page["rooms"] if r["name"]}
+    assert {"FAMILY & MEALS", "KITCHEN", "WALK-IN PANTRY"} <= names
+    assert "FAMILY & MEALS, KITCHEN, WALK-IN PANTRY" not in names
+    assert set(_zone(page, "KITCHEN")["shares_with"]) == {"FAMILY & MEALS", "WALK-IN PANTRY"}
+
+
+def test_fixture_03_island_fridge_and_dishwasher_match_the_table(f3):
+    items = {k["type"]: k for k in f3["page"]["kitchen"]}
+    x0, y0, x1, y1 = items["ISLAND"]["rect"]
+    assert sorted((x1 - x0, y1 - y0)) == pytest.approx([900, 2300], abs=150)  # the table: island 2300 x ~900
+    assert "DW PROV" in items["ISLAND"]["evidence"] and "DISHWASHER PROVISION" in items
+    assert "FRIDGE SPACE" in items  # the table: 1000 fridge recess "F"

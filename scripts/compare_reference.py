@@ -39,6 +39,7 @@ COLOURS = {
     "arch": (255, 140, 0),
     "open_walkway": (255, 140, 0),
     "cavity_slider": (150, 0, 200),
+    "bifold_door": (200, 100, 0),
     "sliding_door": (0, 160, 160),
     "garage_door": (90, 90, 90),
 }
@@ -89,10 +90,13 @@ def parse_reference(md: str) -> Reference:
 def expected(ref: Reference) -> dict[str, Any]:
     """What the table lists, by the same categories the code reads."""
     codes: Counter[str] = Counter()
-    hinged = cavity_arch = walkways = garage = robes = named_robes = 0
+    hinged = cavity_arch = walkways = garage = robes = named_robes = bifolds = 0
     for it in ref.items:
         text = it.interpretation.lower()
         ev = it.evidence.lower()
+        if "bi-fold" in text or "bifold" in text:
+            bifolds += 1
+            continue  # a bi-fold row is its own kind, not a slider or a hinged door
         window_row = "window" in it.title.lower() or "sliding" in text or bool(CODE.match(it.interpretation))
         if window_row and (m := CODE.search(it.interpretation)):
             codes[m.group(0)] += 1
@@ -118,6 +122,7 @@ def expected(ref: Reference) -> dict[str, Any]:
         "codes": codes,
         "hinged": hinged,
         "cavity_arch": cavity_arch,
+        "bifolds": bifolds,
         "walkways": walkways,
         "garage": garage,
         "robes": robes or named_robes,  # robe rows, else the robes named inside room rows
@@ -135,9 +140,11 @@ def found(reading: dict[str, Any]) -> dict[str, Any]:
         "codes": codes,
         "hinged": kinds["hinged_door"],
         "cavity_arch": kinds["cavity_slider"] + kinds["arch"],
+        "bifolds": kinds["bifold_door"],
         "walkways": kinds["open_walkway"],
         "garage": kinds["garage_door"],
         "robes": sum(1 for r in reading["recesses"] if r["kind"] == "robe"),
+        "size_checks": Counter(o["size_check"] for o in reading["openings"] if o["size_check"]),
     }
 
 
@@ -219,6 +226,7 @@ def report(result: dict[str, Any]) -> str:
     for key, label in (
         ("hinged", "Hinged doors"),
         ("cavity_arch", "Cavity sliders or arches"),
+        ("bifolds", "Bi-fold doors"),
         ("walkways", "Open walkways"),
         ("garage", "Garage door"),
         ("robes", "Robes"),
@@ -227,6 +235,12 @@ def report(result: dict[str, Any]) -> str:
     lines.append(
         _row("Windows and sliding doors (by code)", sum(want["codes"].values()), sum(got["codes"].values()))
     )
+    checks = got["size_checks"]
+    lines += [
+        "",
+        f"Written sizes compared with the measured gaps (window codes, door leaf sizes): "
+        f"{checks['matches']} agree, {checks['differs']} differ.",
+    ]
     lines += ["", "## Codes", "", "| Code | Reference | Code reading |", "|---|---|---|"]
     for code in sorted(set(want["codes"]) | set(got["codes"])):
         lines.append(f"| {code} | {want['codes'][code]} | {got['codes'][code]} |")

@@ -62,6 +62,31 @@ class PdfSource:
         self.close()
 
 
+class PdfView:
+    """A vector page drawn as printed (text kept), cropped at `px_mm` mm per pixel, in colour: what a model or
+    a designer looks at. Unlike `PdfSource`, nothing is removed from the drawing."""
+
+    def __init__(self, pdf: Path, page_number: int, scale_ratio: int) -> None:
+        self.factor = vector_walls.mm_per_pt(scale_ratio)
+        self._doc = pymupdf.open(pdf)
+        self._page = self._doc[page_number - 1]
+
+    def crop(self, x0: float, y0: float, x1: float, y1: float, px_mm: float) -> Image.Image:
+        zoom = self.factor / px_mm
+        clip = pymupdf.Rect(x0 / self.factor, y0 / self.factor, x1 / self.factor, y1 / self.factor)
+        pix = self._page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), clip=clip, alpha=False)
+        return Image.frombytes("RGB", (pix.width, pix.height), pix.samples, "raw", "RGB", pix.stride)
+
+    def close(self) -> None:
+        self._doc.close()
+
+    def __enter__(self) -> PdfView:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self.close()
+
+
 class ImageSource:
     """A scan or image page: `mm_per_px` is the image's pixel size at the drawing scale."""
 

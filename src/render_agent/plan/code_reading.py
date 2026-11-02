@@ -10,12 +10,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from render_agent.plan import openings, overlay_check, recesses, rooms, vector_walls
+from render_agent.plan import angled, kitchen, openings, overlay_check, recesses, rooms, vector_walls
 from render_agent.plan.source import Source, Word
 from render_agent.plan.trace_rules import TraceRules
 
 Box = tuple[float, float, float, float]
-DOOR_KINDS = ("hinged_door", "cavity_slider", "open_walkway", "arch", "sliding_door")
+DOOR_KINDS = ("hinged_door", "cavity_slider", "bifold_door", "open_walkway", "arch", "sliding_door")
 
 
 @dataclass
@@ -28,6 +28,7 @@ class CodeReading:
     offsets: dict[str, float]
     connections: list[dict[str, str]] = field(default_factory=list)
     unlabelled: list[dict[str, Any]] = field(default_factory=list)
+    kitchen: list[kitchen.Item] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         """The reading as plan/<dwelling>/code_reading.json (for the whole page; see `for_region`)."""
@@ -42,6 +43,7 @@ class CodeReading:
             "wall_rows": self.wall_rows,
             "connections": self.connections,
             "unlabelled": self.unlabelled,
+            "kitchen": [k.as_dict() for k in self.kitchen],
             "room_offsets": [{"id": r.id, "off_drawing_mm": round(self.offsets[r.id])} for r in self.rooms],
         }
 
@@ -68,6 +70,7 @@ def for_region(reading: dict[str, Any], region: Box | None) -> dict[str, Any]:
         "wall_rows": [w for w in reading["wall_rows"] if inside(w["box"])],
         "connections": [c for c in reading["connections"] if c["opening"] in keep],
         "unlabelled": [u for u in reading["unlabelled"] if u["room"] in ids],
+        "kitchen": [k for k in reading["kitchen"] if inside(k["rect"])],
         "room_offsets": [r for r in reading["room_offsets"] if r["id"] in ids],
     }
 
@@ -75,7 +78,8 @@ def for_region(reading: dict[str, Any], region: Box | None) -> dict[str, Any]:
 def _inside_one_room(op: openings.Opening, spaces: list[rooms.Room], px: float) -> bool:
     """An open walkway or arch with the same room (or no room) on both sides: a gap between a wall and a
     fitting, not a way between two rooms."""
-    if op.kind not in ("open_walkway", "arch") or op.gap.exterior:
+    unsure_line = op.kind == "cavity_slider" and op.confidence == "unsure" and not op.features.words
+    if (op.kind not in ("open_walkway", "arch") and not unsure_line) or op.gap.exterior:
         return False
     low, high = rooms.sides(op, spaces, px)
     return low is None or high is None or low.id == high.id
@@ -104,11 +108,12 @@ def read_page(
         found,
         spaces,
         pockets,
-        overlay_check.wall_rows(vp, spaces, rules),
+        overlay_check.wall_rows(vp, spaces, rules) + angled.rows(angled.find(vp, rules), rules),
         overlay_check.item_offsets(vp, spaces, found, pockets, rules),
     )
     reading.connections = _connections(found, spaces, vp.px_mm, rules)
     reading.unlabelled = _unlabelled(spaces, reading.connections, rules)
+    reading.kitchen = kitchen.read(vp, source, spaces, words, rules)
     return reading
 
 
