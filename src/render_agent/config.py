@@ -35,7 +35,14 @@ from render_agent.errors import PermanentError
 MODEL_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]*[a-z0-9]$")
 KEY_ENV_VARS = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "muapi": "MUAPI_API_KEY"}
 SECRET_ENV_VARS = (*KEY_ENV_VARS.values(), "SMTP_USERNAME", "SMTP_PASSWORD")
-READ_ONLY_PATHS = ("knowledge", "prompts", "schemas", "engine", "assets")  # resolved against the install root
+READ_ONLY_PATHS = (
+    "knowledge",
+    "prompts",
+    "schemas",
+    "engine",
+    "assets",
+    "practice",
+)  # resolved against the install root
 APP_FOLDER = "RenderAgent"
 
 
@@ -64,6 +71,7 @@ class Paths(_Strict):
     memory: Path = Path("memory")  # project memory and agent rules (PLAN_VISUALS_SPEC section 13)
     engine: Path = Path("private/engine")  # plan visuals: plan.js, still.js, three.js, glTF models
     assets: Path = Path("private/assets")  # plan visuals: photo tops and the asset index
+    practice: Path = Path("private/fixtures")  # test drawing sets with sample readings (Practice run)
 
 
 class Watcher(_Strict):

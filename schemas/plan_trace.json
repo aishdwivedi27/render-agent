@@ -126,6 +126,20 @@
               "ORANGE",
               "RED"
             ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
           }
         },
         "required": [
@@ -134,7 +148,9 @@
           "name",
           "outline",
           "evidence",
-          "confidence"
+          "confidence",
+          "alternative",
+          "question"
         ],
         "additionalProperties": false
       }
@@ -205,6 +221,20 @@
               "ORANGE",
               "RED"
             ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
           }
         },
         "required": [
@@ -217,7 +247,9 @@
           "swing",
           "rooms",
           "evidence",
-          "confidence"
+          "confidence",
+          "alternative",
+          "question"
         ],
         "additionalProperties": false
       }
@@ -267,6 +299,20 @@
               "ORANGE",
               "RED"
             ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
           }
         },
         "required": [
@@ -276,7 +322,9 @@
           "room",
           "outline",
           "evidence",
-          "confidence"
+          "confidence",
+          "alternative",
+          "question"
         ],
         "additionalProperties": false
       }
@@ -320,6 +368,20 @@
               "ORANGE",
               "RED"
             ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
           }
         },
         "required": [
@@ -329,7 +391,9 @@
           "room",
           "outline",
           "evidence",
-          "confidence"
+          "confidence",
+          "alternative",
+          "question"
         ],
         "additionalProperties": false
       }

@@ -121,7 +121,9 @@ def test_every_status_and_stage_has_plain_words():
     for status, step in plain.COMING_IN.items():
         assert status in JOB_STATUSES
         assert plain.screen_for(status) == "coming"
-        assert plain.coming_text(status) == f"This screen is coming in PV{step}."
+        assert plain.coming_text(status).endswith(f"coming in PV{step}.") or (
+            plain.coming_text(status).endswith(f"(coming in PV{step}).")
+        )
     assert plain.screen_for("AWAITING_VIEWS") == "views" and plain.coming_text("AWAITING_VIEWS") == ""
 
 

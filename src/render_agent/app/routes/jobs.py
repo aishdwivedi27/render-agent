@@ -17,7 +17,7 @@ from render_agent.app.security import job_file, require_token
 from render_agent.app.worker import find_job_dir
 from render_agent.errors import AgentError
 from render_agent.output.folders import names
-from render_agent.pipeline import plan_check, plan_start
+from render_agent.pipeline import plan_start
 from render_agent.pipeline.job import STAGES, cancel_requested, load_job
 from render_agent.validate.checklist_validator import load_view_set
 
@@ -87,8 +87,6 @@ def summary(ctx: AppContext, job_dir: Path, full: bool = False) -> JobOut:
         readout=plan_start.readout_text(job_dir),
         **plain.step_of(stage, status),
     )
-    if status == "AWAITING_PLAN_CHECK" and out.screen == "coming" and not plan_check.seen(job_dir):
-        out.screen, out.coming = "plan_check", ""  # the trace comes first; its questions are PV3
     if full:
         out.progress = progress(job_dir, st)
         out.history_folder = info.get("history")

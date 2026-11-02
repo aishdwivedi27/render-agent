@@ -1,0 +1,347 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "plan_code_reading",
+  "description": "plan/<dwelling>/code_reading.json: what the code read from the drawing itself, with no model (PLAN_VISUALS_SPEC section 3): rooms, openings, recesses, connections, wall rows from the overlay check against the drawing, and how far each item is from a drawn wall. Coordinates are mm in the page frame at the drawing scale (y down).",
+  "type": "object",
+  "properties": {
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "area_m2": {
+            "type": "number"
+          },
+          "width_mm": {
+            "type": "integer"
+          },
+          "depth_mm": {
+            "type": "integer"
+          },
+          "outdoor": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "labels",
+          "outline",
+          "area_m2",
+          "width_mm",
+          "depth_mm",
+          "outdoor"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "frame": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "axis": {
+            "type": "string"
+          },
+          "width_mm": {
+            "type": "integer"
+          },
+          "position_mm": {
+            "type": "integer"
+          },
+          "wall_line_mm": {
+            "type": "integer"
+          },
+          "exterior": {
+            "type": "boolean"
+          },
+          "hinge_end": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "swing_side": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "code_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "off_drawing_mm": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "alternative",
+          "confidence",
+          "evidence",
+          "frame",
+          "axis",
+          "width_mm",
+          "position_mm",
+          "wall_line_mm",
+          "exterior",
+          "hinge_end",
+          "swing_side",
+          "code",
+          "code_note",
+          "rooms",
+          "off_drawing_mm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "rect": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "room": {
+            "type": "string"
+          },
+          "room_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source": {
+            "type": "string"
+          },
+          "depth_mm": {
+            "type": "integer"
+          },
+          "length_mm": {
+            "type": "integer"
+          },
+          "off_drawing_mm": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "alternative",
+          "confidence",
+          "evidence",
+          "rect",
+          "room",
+          "room_name",
+          "source",
+          "depth_mm",
+          "length_mm",
+          "off_drawing_mm"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "wall_rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "box": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "confidence": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "box",
+          "confidence",
+          "evidence",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "connections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "opening": {
+            "type": "string"
+          },
+          "item": {
+            "type": "string"
+          },
+          "a": {
+            "type": "string"
+          },
+          "b": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "opening",
+          "item",
+          "a",
+          "b"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "unlabelled": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "type": "string"
+          },
+          "between": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "room",
+          "between"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "room_offsets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "off_drawing_mm": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "off_drawing_mm"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "rooms",
+    "openings",
+    "recesses",
+    "wall_rows",
+    "connections",
+    "unlabelled",
+    "room_offsets"
+  ],
+  "additionalProperties": false
+}

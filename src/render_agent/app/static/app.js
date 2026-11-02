@@ -56,7 +56,7 @@ function stepLine(job) {
 }
 
 function pill(status, text) {
-  const kind = { AWAITING_PLAN_START: "wait", AWAITING_PLAN_CHECK: "wait", AWAITING_VIEWS: "wait", AWAITING_APPROVAL: "wait", AWAITING_REVIEW: "wait", FAILED: "bad", PAUSED: "bad", SUCCEEDED: "good", RUNNING: "run", RENDERING: "run", NEW: "run" }[status] || "";
+  const kind = { AWAITING_PLAN_START: "wait", AWAITING_PLAN_CHECK: "wait", AWAITING_ELEVATION_CHOICE: "wait", AWAITING_VIEWS: "wait", AWAITING_APPROVAL: "wait", AWAITING_REVIEW: "wait", FAILED: "bad", PAUSED: "bad", SUCCEEDED: "good", RUNNING: "run", RENDERING: "run", NEW: "run" }[status] || "";
   return `<span class="pill ${kind}">${esc(text)}</span>`;
 }
 
@@ -237,7 +237,7 @@ function progressScreen(job, meta, warn) {
   const what = job.queued > 0 ? `Waiting its turn (${job.queued} ahead)`
     : job.stage_text === "Waiting for your approval" ? "Starting the renders…" : stepLine(job);
   const detail = counting ? `${p.done} of ${p.total} renders` : afterApproval ? "Preparing each render from the drawings" : planning ? "Planning the views you chose" : plans ? "Working on the plans" : "Reading the drawings";
-  view.innerHTML = head(afterApproval ? "Making your renders" : planning ? "Planning your views" : plans ? "Starting the plan check" : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, stepOf(job), false, job)
+  view.innerHTML = head(afterApproval ? "Making your renders" : planning ? "Planning your views" : plans ? (job.stage_text === "Tracing the floor plan" ? "Reading your floor plan" : "Starting the plan check") : "Reading the drawings", "You can close this window. The job carries on when you open Render Agent again.", meta, stepOf(job), false, job)
     + warn + `<section class="panel progress"><p class="stage">${esc(what)}</p><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
     <p class="muted">${esc(detail)}</p></section>
     <div class="actions">${job.can_cancel ? '<button id="cancel-job">Cancel job</button>' : ""}<a href="#/home">Back to Home</a></div>`;
@@ -284,54 +284,129 @@ async function planStartScreen(job, meta, warn) {
   };
 }
 
-// ---------- Check the plan (the trace; read-only until the questions come in PV3) ----------
+// ---------- Check the plan: the trace, the readout table and the floor plan questions ----------
 async function planCheckScreen(job, meta, warn) {
   const r = await api(`/jobs/${enc(job.id)}/plan-check`);
   const ds = r.dwellings;
-  let at = 0;
+  const multi = (r.models || []).length > 1;
+  const inBatch = new Set((r.batch || []).map((b) => `${b.dwelling}|${b.row_id}`));
+  let at = Math.max(0, ds.findIndex((d) => r.batch.length && d.id === r.batch[0].dwelling));
+  let lit = null; // the row highlighted on the overlay
   const pct = (v) => v === null || v === undefined ? "" : `${v > 0 ? "+" : ""}${(v * 100).toFixed(1)}%`;
   const m2 = (v) => v === null || v === undefined ? '<span class="muted">not read</span>' : `${Number(v).toFixed(2)} m²`;
+  const dot = (c) => `<span class="dot ${esc(String(c).toLowerCase())}"></span>`;
+  const word = { GREEN: "Green", ORANGE: "Orange", RED: "Red" };
   const failed = Object.entries(r.failed || {});
   const failNote = failed.length ? `<div class="notice bad">${failed.map(([m, why]) => `<p><strong>${esc(m)} could not read the drawing.</strong> ${esc(why)}</p>`).join("")}
       <div style="margin-top:8px"><button id="reread">Read again with ${esc(failed.map(([m]) => m).join(" and "))}</button> <span class="muted">the other reading is kept</span></div></div>` : "";
   const notes = (r.notes || []).map((n) => `<div class="notice"><p>${esc(n)}</p></div>`).join("");
-  const tabs = ds.length > 1 ? `<div class="tabs" role="tablist">${ds.map((d, i) => `<button role="tab" data-tab="${i}">${esc(d.id)}</button>`).join("")}</div>` : "";
-  view.innerHTML = head("Check the plan", "The walls traced from your drawing are drawn over it. Check they sit on the drawing's walls and that the areas make sense; the questions come next.", meta, 1, false, job)
-    + warn + `<div id="msg"></div>${failNote}${notes}${tabs}<div id="dwelling"></div>
-    <div class="sticky-actions"><div class="actions"><button class="primary" id="go">Continue</button><a href="#/home">Back to Home</a></div></div>`;
+  const s = r.summary || { green: 0, orange: 0, red: 0 };
+  const sumOf = (c) => `<p class="readout-sum" aria-live="polite">${dot("green")}${c.green} Green, ${dot("orange")}${c.orange} Orange, ${dot("red")}${c.red} Red</p>`;
+  const sumLine = "";
+  const rowOf = (dw, id) => (ds.find((d) => d.id === dw) || { rows: [] }).rows.find((x) => x.id === id);
+  const question = (b, i) => {
+    const x = rowOf(b.dwelling, b.row_id);
+    if (!x) return "";
+    const name = `q${i}`;
+    const opts = (x.options || []).map((o) => `<label class="opt"><input type="radio" name="${name}" value="${esc(o.key)}"> ${esc(o.label)}</label>`).join("");
+    return `<fieldset class="q" data-dw="${esc(b.dwelling)}" data-row="${esc(x.id)}"><legend>${dot(x.confidence)}<strong>${esc(x.item)}</strong>${ds.length > 1 ? ` <span class="muted">· ${esc(b.dwelling)}</span>` : ""} <button class="link" type="button" data-show="${esc(b.dwelling)}|${esc(x.id)}">show on plan</button></legend>
+      <p>${esc(x.question)}</p>${opts}
+      <label class="opt free"><input type="radio" name="${name}" value="text"> ${x.id === "scale" ? "Scale (for example 1:100):" : "Something else:"} <input type="text" data-text="${name}" maxlength="1000" placeholder="${x.id === "scale" ? "1:100" : "Say what the drawing shows"}"></label></fieldset>`;
+  };
+  const qs = (r.batch || []).map(question).join("");
+  const batchPanel = r.all_green ? `<section class="panel q-panel"><p><strong>All items are Green.</strong> Check the tables below, then press Continue to move on to the elevation choice.</p></section>`
+    : `<section class="panel q-panel"><h3>Questions for you <span class="muted">(${r.batch.length} of ${s.orange + s.red}, Red first)</span></h3>${qs}
+      <div class="actions"><button class="primary" id="send">Send answers</button><span class="muted">Your answers are kept for this project; the plan is read again and the overlay redrawn.</span></div></section>`;
+  const tabs = ds.length > 1 ? `<div class="tabs" role="tablist">${ds.map((d, i) => `<button role="tab" data-tab="${i}">${esc(d.id)} ${d.summary.orange + d.summary.red ? `<span class="muted">(${d.summary.orange + d.summary.red})</span>` : "✓"}</button>`).join("")}</div>` : "";
+  view.innerHTML = head("Check the plan", "What was read from your floor plan, drawn over it. Answer the questions until every row is Green; nothing moves on before that.", meta, 1, false, job)
+    + warn + `<div id="msg"></div>${failNote}${notes}${sumLine}${batchPanel}${tabs}<div id="dwelling"></div>
+    <div class="sticky-actions"><div class="actions">${r.all_green ? '<button class="primary" id="go">Continue</button>' : ""}${job.can_cancel ? '<button id="cancel-job">Cancel job</button>' : ""}<a href="#/home">Back to Home</a></div></div>`;
+  const highlight = () => {
+    const box = document.getElementById("hl");
+    if (!box) return;
+    const d = ds[at];
+    const x = lit && lit.dw === d.id ? d.rows.find((y) => y.id === lit.id) : null;
+    view.querySelectorAll("tr[data-row]").forEach((tr) => tr.classList.toggle("lit", !!x && tr.dataset.row === x.id));
+    if (!x || !x.target) { box.hidden = true; return; }
+    const [x0, y0, x1, y1] = x.target;
+    Object.assign(box.style, { left: `${x0 * 100}%`, top: `${y0 * 100}%`, width: `${Math.max(x1 - x0, 0.01) * 100}%`, height: `${Math.max(y1 - y0, 0.01) * 100}%` });
+    box.hidden = false;
+  };
   const show = () => {
     const d = ds[at];
     view.querySelectorAll("[data-tab]").forEach((b) => b.setAttribute("aria-selected", String(Number(b.dataset.tab) === at)));
     if (!d) { document.getElementById("dwelling").innerHTML = '<section class="panel"><p>No plan was traced.</p></section>'; return; }
-    const rows = d.areas.map((a) => `<tr class="${a.over ? "over" : ""}"><td>${esc(a.area)}</td><td>${a.drawing === null ? '<span class="muted">not on the drawing</span>' : m2(a.drawing)}</td><td>${m2(a.traced)}</td><td>${a.over ? `<strong>${pct(a.difference)}</strong>` : pct(a.difference)}</td></tr>`).join("");
-    const items = d.rows.filter((x) => !/ area$/.test(x.item)).map((x) => `<li><span class="dot ${esc(x.confidence.toLowerCase())}"></span><strong>${esc(x.item)}:</strong> ${esc(x.reading)}${x.question ? `<br><span class="muted">${esc(x.question)}</span>` : ""}</li>`).join("");
-    const src = `/api/jobs/${enc(job.id)}/file/${d.overlay.split("/").map(enc).join("/")}`;
-    document.getElementById("dwelling").innerHTML = `${d.mirror ? `<div class="notice"><p><strong>${esc(d.mirror)}.</strong> You will be asked to confirm this.</p></div>` : ""}
+    const areas = d.areas.map((a) => `<tr class="${a.over ? "over" : ""}"><td>${esc(a.area)}</td><td>${a.drawing === null ? '<span class="muted">not on the drawing</span>' : m2(a.drawing)}</td><td>${m2(a.traced)}</td><td>${a.over ? `<strong>${pct(a.difference)}</strong>` : pct(a.difference)}</td></tr>`).join("");
+    const per = (x, i) => {
+      const y = (x.readings || [])[i];
+      if (!y) return '<td class="muted">–</td>';
+      return `<td>${y.status === "not_read" ? '<span class="muted">not read</span>' : y.reading === "not found" ? '<span class="muted">not found</span>' : `${dot(y.confidence)}${esc(y.reading)}`}</td>`;
+    };
+    const lineOf = (x) => `<tr data-row="${esc(x.id)}" class="${x.target ? "clickable" : ""} ${inBatch.has(`${d.id}|${x.id}`) ? "asked" : ""}" tabindex="0">
+        <td class="num">${x.n}</td><td>${esc(x.item)}</td>
+        <td>${esc(x.reading)}${x.changed ? `<br><span class="changed">${esc(x.changed)}</span>` : ""}${x.answer ? `<br><span class="answered">Your answer: ${esc(x.answer)}</span>` : ""}</td>
+        ${multi ? r.models.map((_, i) => per(x, i)).join("") : ""}
+        <td class="muted">${esc(x.evidence)}</td><td>${dot(x.confidence)}${word[x.confidence] || esc(x.confidence)}</td>
+        <td>${x.question ? esc(x.question) : '<span class="muted">–</span>'}</td></tr>`;
+    const head = `<tr><th>#</th><th>Item</th><th>What I read</th>${multi ? r.models.map((m) => `<th>${esc(m)}</th>`).join("") : ""}<th>Evidence</th><th>Confidence</th><th>Question for you</th></tr>`;
+    const mainRows = d.rows.filter((x) => x.table !== "other");
+    const otherRows = d.rows.filter((x) => x.table === "other");
+    const tableOf = (rs, sum, title) => `${title ? `<h3 style="margin:14px 0 6px">${esc(title)}</h3>` : ""}${sumOf(sum || { green: 0, orange: 0, red: 0 })}<table class="readout"><thead>${head}</thead><tbody>${rs.map(lineOf).join("")}</tbody></table>`;
+    const src = `/api/jobs/${enc(job.id)}/file/${d.overlay.split("/").map(enc).join("/")}?v=${d.overlay_version}`;
+    document.getElementById("dwelling").innerHTML = `${d.mirror ? `<div class="notice"><p><strong>${esc(d.mirror)}.</strong></p></div>` : ""}
       <p class="muted method">${esc(d.method)}</p>
       <div class="plan-check"><section class="panel zoom"><div class="zoom-tools"><button id="zin" aria-label="Zoom in">+</button><button id="zout" aria-label="Zoom out">−</button><button id="zfit">Fit</button></div>
-        <div class="zoom-view" id="zv"><img id="zimg" alt="Traced walls over the floor plan of ${esc(d.id)}" src="${src}"></div></section>
+        <div class="zoom-view" id="zv"><div class="zoom-stage" id="zs"><img id="zimg" alt="What was read, over the floor plan of ${esc(d.id)}" src="${src}"><div class="hl" id="hl" hidden></div></div></div></section>
       <section class="panel" style="padding:18px"><h3 style="margin:0 0 8px">Areas</h3>
-        <table class="areas"><thead><tr><th>Area</th><th>Drawing</th><th>Traced</th><th>Difference</th></tr></thead><tbody>${rows || '<tr><td colspan="4" class="muted">The drawing has no area schedule.</td></tr>'}</tbody></table>
-        <p class="muted" style="margin:8px 0 0">More than 3% different is shown in red and becomes a question.</p>
-        ${items ? `<h3 style="margin:16px 0 8px">Also found</h3><ul class="found">${items}</ul>` : ""}</section></div>`;
-    zoomable(document.getElementById("zv"), document.getElementById("zimg"));
+        <table class="areas"><thead><tr><th>Area</th><th>Drawing</th><th>Traced</th><th>Difference</th></tr></thead><tbody>${areas || '<tr><td colspan="4" class="muted">The drawing has no area schedule.</td></tr>'}</tbody></table>
+        <p class="muted" style="margin:8px 0 0">More than 3% different is shown in red and becomes a question.</p></section></div>
+      <section class="panel readout-wrap">${tableOf(mainRows, d.main_summary)}${otherRows.length ? tableOf(otherRows, d.other_summary, d.other_title) : ""}
+        <p class="muted" style="margin:8px 0 0">Click a row to see it on the plan.</p></section>`;
+    zoomable(document.getElementById("zv"), document.getElementById("zs"));
+    view.querySelectorAll("tr[data-row]").forEach((tr) => {
+      tr.onclick = () => { lit = { dw: d.id, id: tr.dataset.row }; highlight(); };
+      tr.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); tr.onclick(); } };
+    });
+    highlight();
   };
   view.querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { at = Number(b.dataset.tab); show(); }));
+  view.querySelectorAll("[data-show]").forEach((b) => (b.onclick = () => {
+    const [dw, id] = b.dataset.show.split("|");
+    at = Math.max(0, ds.findIndex((d) => d.id === dw)); lit = { dw, id }; show();
+    document.getElementById("zv").scrollIntoView({ behavior: "smooth", block: "center" });
+  }));
+  view.querySelectorAll("input[data-text]").forEach((t) => (t.oninput = () => { const radio = view.querySelector(`input[name="${t.dataset.text}"][value="text"]`); if (radio) radio.checked = true; }));
+  if (r.batch.length) lit = { dw: r.batch[0].dwelling, id: r.batch[0].row_id }; // the first question is shown on the plan
   show();
   const rr = document.getElementById("reread");
   if (rr) rr.onclick = async () => { rr.disabled = true; try { await api(`/jobs/${enc(job.id)}/plan-check/reread`, {}); route(); } catch (e) { rr.disabled = false; document.getElementById("msg").innerHTML = problem(e.data); } };
+  const send = document.getElementById("send");
+  if (send) send.onclick = async () => {
+    const answers = [...view.querySelectorAll("fieldset.q")].map((f, i) => {
+      const pick = f.querySelector(`input[name="q${i}"]:checked`);
+      const text = (f.querySelector(`input[data-text="q${i}"]`) || {}).value || "";
+      return pick ? { dwelling: f.dataset.dw, row_id: f.dataset.row, option: pick.value, text: pick.value === "text" ? text : "" } : null;
+    }).filter(Boolean);
+    if (!answers.length) { document.getElementById("msg").innerHTML = problem({ what_happened: "No answer picked yet.", what_to_do: "Pick a choice or write an answer for at least one question." }); return; }
+    send.disabled = true; send.textContent = "Reading the plan again…";
+    try { await api(`/jobs/${enc(job.id)}/plan-check/answers`, { answers }); route(); }
+    catch (e) { send.disabled = false; send.textContent = "Send answers"; document.getElementById("msg").innerHTML = problem(e.data); }
+  };
   const go = document.getElementById("go");
-  go.onclick = async () => {
+  if (go) go.onclick = async () => {
     go.disabled = true;
     try { await api(`/jobs/${enc(job.id)}/plan-check/continue`, {}); route(); }
     catch (e) { go.disabled = false; document.getElementById("msg").innerHTML = problem(e.data); }
   };
+  const cj = document.getElementById("cancel-job");
+  if (cj) cj.onclick = () => cancelJob(job.id);
 }
 
-// zoom with the buttons or the mouse wheel, drag to move around; Fit shows the whole image
-function zoomable(box, img) {
+// zoom with the buttons or the mouse wheel, drag to move around; Fit shows the whole image.
+// `stage` is the image (or the image with its highlight box), moved and scaled as one.
+function zoomable(box, stage) {
   let z = 1, x = 0, y = 0, drag = null;
-  const apply = () => { img.style.transform = `translate(${x}px, ${y}px) scale(${z})`; };
+  const apply = () => { stage.style.transform = `translate(${x}px, ${y}px) scale(${z})`; };
   const fit = () => { z = 1; x = 0; y = 0; apply(); };
   const zoomAt = (f, cx, cy) => {
     const nz = Math.min(8, Math.max(1, z * f));

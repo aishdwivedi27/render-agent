@@ -10,6 +10,8 @@ paths:
   schemas: schemas
   engine: private/engine      # plan visuals: plan.js, still.js, three.js, glTF models (install root)
   assets: private/assets      # plan visuals: photo tops and ph_asset_index.json (install root)
+  practice: private/fixtures  # Practice run: test drawing sets with sample readings in canned/ (install
+                              # root; a missing folder means no sample readings)
   logs: logs
   feedback: feedback          # feedback.jsonl: every flag and correction, all jobs
   memory: memory              # projects/<key>.json (project memory), agent_rules.json (agent memory)

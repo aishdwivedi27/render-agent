@@ -88,7 +88,6 @@ def step_of(stage: str | None, status: str) -> dict[str, Any]:
 
 # plan visuals screens not built yet: status -> the PV step that builds it (a placeholder until then)
 COMING_IN = {
-    "AWAITING_PLAN_CHECK": 3,  # the floor plan questions; PV2 shows the trace first (screen plan_check)
     "AWAITING_ELEVATION_CHOICE": 4,
     "AWAITING_ELEVATION_CHECK": 4,
     "AWAITING_STYLES": 5,
@@ -101,6 +100,7 @@ COMING_IN = {
 # the screen the app shows for a job in each status
 SCREEN = {
     "AWAITING_PLAN_START": "plan_start",
+    "AWAITING_PLAN_CHECK": "plan_check",
     "AWAITING_VIEWS": "views",
     "AWAITING_APPROVAL": "approval",
     "AWAITING_REVIEW": "review",
@@ -118,10 +118,16 @@ def screen_for(status: str) -> str:
     return SCREEN.get(status, "progress")
 
 
+COMING_NAME = {"AWAITING_ELEVATION_CHOICE": "Elevation choice"}
+
+
 def coming_text(status: str) -> str:
     """The placeholder line for a plan visuals screen that a later PV step builds."""
     step = COMING_IN.get(status)
-    return f"This screen is coming in PV{step}." if step else ""
+    if not step:
+        return ""
+    name = COMING_NAME.get(status)
+    return f"{name} (coming in PV{step})." if name else f"This screen is coming in PV{step}."
 
 
 def error_of(job_dir: Path) -> dict[str, str] | None:

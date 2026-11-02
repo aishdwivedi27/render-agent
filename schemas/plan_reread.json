@@ -1,0 +1,328 @@
+{
+  "type": "object",
+  "properties": {
+    "rooms": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string",
+            "description": "Room name as labelled, upper case"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "name",
+          "outline",
+          "evidence",
+          "confidence",
+          "alternative",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "openings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "hinged_door",
+              "cavity_slider",
+              "sliding_door",
+              "open_walkway",
+              "arch",
+              "garage_door",
+              "window"
+            ]
+          },
+          "at": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+          },
+          "width_mm": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Window or door code as written, e.g. 15-18, else null"
+          },
+          "swing": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Which room the door swings into, else null"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "kind",
+          "at",
+          "width_mm",
+          "code",
+          "swing",
+          "rooms",
+          "evidence",
+          "confidence",
+          "alternative",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "recesses": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "robe",
+              "shower_recess",
+              "linen",
+              "nib",
+              "other"
+            ]
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "kind",
+          "room",
+          "outline",
+          "evidence",
+          "confidence",
+          "alternative",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "dwelling": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "description": "e.g. WC, BASIN, BATH, SHOWER, BENCH, ISLAND, SINK, LAUNDRY TUB"
+          },
+          "room": {
+            "type": "string"
+          },
+          "outline": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              },
+              "description": "[x, y] as a fraction of the page width and height (0-1, y down)"
+            },
+            "description": "Corner points in order, page fractions"
+          },
+          "evidence": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": [
+              "GREEN",
+              "ORANGE",
+              "RED"
+            ]
+          },
+          "alternative": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: the other sensible reading, else null"
+          },
+          "question": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Only when not GREEN: one specific question for the designer, else null"
+          }
+        },
+        "required": [
+          "id",
+          "dwelling",
+          "type",
+          "room",
+          "outline",
+          "evidence",
+          "confidence",
+          "alternative",
+          "question"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "notes": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "rooms",
+    "openings",
+    "recesses",
+    "fixtures",
+    "notes"
+  ],
+  "additionalProperties": false,
+  "description": "Floor plan re-read after the designer's answers (PLAN_VISUALS_SPEC section 4): only the items asked about, with the same ids, read again from the page with the answers in mind. Coordinates are page fractions. Nothing is invented; an item the answer says is not there is left out."
+}

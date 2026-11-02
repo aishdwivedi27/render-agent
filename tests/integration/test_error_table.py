@@ -186,7 +186,11 @@ ROWS: dict[tuple[str, str], list[str]] = {
         "tests.unit.test_p1_trace::test_compare_marks_differences_over_tolerance",
     ],
     ("Plan", "Both readout models chosen and one fails"): [
-        "tests.integration.test_pv2_app::test_both_models_one_fails_the_other_is_kept_and_read_again_retries_only_it"
+        "tests.integration.test_pv2_app::test_both_models_one_fails_the_other_is_kept_and_read_again_retries_only_it",
+        "tests.integration.test_pv3_app::test_one_model_failing_leaves_the_other_reading_orange_not_read",
+    ],
+    ("Plan", "Reading the plan again after the designer's answers fails"): [
+        "tests.integration.test_pv3_app::test_a_failed_re_read_keeps_the_answers_and_retry_reads_again"
     ],
     ("Plan", "A chosen readout model has no saved key"): [
         "tests.unit.test_p1_trace::test_chosen_readout_model_without_a_key_pauses_naming_it"

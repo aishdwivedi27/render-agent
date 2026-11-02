@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from render_agent.errors import AgentError, InputError, PermanentError
-from render_agent.util.fs import atomic_write_json, safe_name, sha256_file
+from render_agent.util.fs import atomic_write_json, read_text, safe_name, sha256_file
 
 STAGES = [
     "s1_ingest",
@@ -40,8 +40,9 @@ STAGES = [
 # Plan visuals stages (docs/PLAN_VISUALS_SPEC.md section 1). Each PV step switches its stages on by
 # adding them to ENABLED_PLAN_STAGES; until then new jobs skip them.
 PLAN_STAGES = STAGES[STAGES.index("gate_plan_start") : STAGES.index("gate_views")]
-# PV1: Start the plan check. PV2: the trace and the read-only Check the plan screen.
-ENABLED_PLAN_STAGES: set[str] = {"gate_plan_start", "p1_trace", "gate_plan_check"}
+# PV1: Start the plan check. PV2: the trace and the read-only Check the plan screen. PV3: the floor plan
+# questions; the elevation choice waits on its placeholder until PV4.
+ENABLED_PLAN_STAGES: set[str] = {"gate_plan_start", "p1_trace", "gate_plan_check", "gate_elevation_choice"}
 SKIP_NOT_ENABLED = "not enabled yet"
 SKIP_ADDED_LATER = "added after this job started"
 SUBDIRS = ["input", "pages", "sheets", "references", "prompts", "checks", "output"]
@@ -209,7 +210,7 @@ def load_job(job_dir: Path) -> Job:
             what_to_do="Check the job folder path (jobs/<job-id>).",
         )
     try:
-        state = json.loads(state_file.read_text(encoding="utf-8"))
+        state = json.loads(read_text(state_file))  # the worker may be saving it right now
     except json.JSONDecodeError as exc:
         raise PermanentError(
             code="STATE_CORRUPT",

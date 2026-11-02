@@ -120,6 +120,17 @@ class PlanStartIn(BaseModel):
     readout_llm: Literal["claude", "openai", "both"] = "claude"
 
 
+class PlanAnswerIn(BaseModel):
+    dwelling: str = Field(max_length=80)
+    row_id: str = Field(max_length=120)
+    option: str = Field(default="", max_length=80)
+    text: str = Field(default="", max_length=1000)
+
+
+class PlanAnswersIn(BaseModel):
+    answers: list[PlanAnswerIn] = Field(max_length=20)
+
+
 class InterpretIn(BaseModel):
     text: str = Field(default="", max_length=1000)
 

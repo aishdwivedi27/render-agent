@@ -19,7 +19,7 @@ from render_agent.config import Settings
 from render_agent.errors import AgentError
 from render_agent.pipeline.job import CANCEL_FILE, cancel_requested, load_job
 from render_agent.pipeline.start import continue_job
-from render_agent.util.fs import atomic_write_json, atomic_write_text
+from render_agent.util.fs import atomic_write_json, atomic_write_text, read_text
 
 QUEUE_FILE = "queue.json"
 RESUME_ON_LAUNCH = {"NEW", "RUNNING", "RENDERING"}  # stopped mid-work (crash, reboot, app closed)
@@ -97,7 +97,7 @@ class JobWorker:
         jobs_dir = self.settings().path("jobs")
         for state_file in sorted(jobs_dir.glob("*/state.json")) if jobs_dir.is_dir() else []:
             try:
-                status = json.loads(state_file.read_text(encoding="utf-8")).get("status")
+                status = json.loads(read_text(state_file)).get("status")
             except (OSError, ValueError):
                 continue
             if status in RESUME_ON_LAUNCH and state_file.parent.name not in ids:

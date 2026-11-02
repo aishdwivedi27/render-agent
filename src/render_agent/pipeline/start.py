@@ -10,7 +10,7 @@ from render_agent.config import Settings
 from render_agent.logging_setup import attach_job_log, detach_job_log
 from render_agent.pipeline.job import Job
 from render_agent.pipeline.runner import RunContext, RunResult, run_job
-from render_agent.util.fs import sha256_file
+from render_agent.util.fs import read_text, sha256_file
 
 
 def drop_inputs(src: Path) -> list[Path]:
@@ -33,7 +33,7 @@ def existing_job(jobs_dir: Path, inputs: list[Path]) -> Path | None:
         return None
     for state_file in sorted(jobs_dir.glob("*/state.json")):
         try:
-            state = json.loads(state_file.read_text(encoding="utf-8"))
+            state = json.loads(read_text(state_file))
         except (OSError, ValueError):
             continue
         have = sorted(i["sha256"] for i in state.get("inputs", []) if i["name"].lower().endswith(".pdf"))

@@ -79,6 +79,32 @@
         "additionalProperties": false
       }
     },
+    "wall_outlines": {
+      "type": "array",
+      "description": "The outline of each connected wall group as an orthogonal polygon in mm (every jog and return kept); a hole is a space enclosed by walls.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            }
+          },
+          "hole": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "points",
+          "hole"
+        ],
+        "additionalProperties": false
+      }
+    },
     "rooms": {
       "type": "array",
       "items": {
@@ -374,6 +400,7 @@
     "scale",
     "region",
     "walls",
+    "wall_outlines",
     "rooms",
     "openings",
     "recesses",

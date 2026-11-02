@@ -17,7 +17,7 @@ from typing import Any
 
 from render_agent.config import Settings
 from render_agent.errors import AgentError, InputError, PauseJobError
-from render_agent.pipeline import gate, plan_start, view_choice
+from render_agent.pipeline import gate, plan_check, plan_start, view_choice
 from render_agent.pipeline.job import Job, cancel_requested
 
 log = logging.getLogger("render_agent.runner")
@@ -134,9 +134,25 @@ def _run_job(ctx: RunContext, stages: dict[str, StageFn | None] | None) -> RunRe
                 plan_start.pass_without_screen(job, ctx.settings)
             job.mark_stage_done(name, plan_start.CHOSEN)
             continue
-        if name == "gate_plan_check":  # the floor plan questions (PV3) decide when it passes
-            job.set_status("AWAITING_PLAN_CHECK")
-            return RunResult("AWAITING_PLAN_CHECK", name, "Waiting for the designer to check the plan.")
+        if name == "gate_plan_check":  # nothing moves on while any floor plan row is Orange or Red
+            if not plan_check.all_green(job.dir):
+                job.set_status("AWAITING_PLAN_CHECK")
+                n = plan_check.open_rows(job.dir)
+                return RunResult("AWAITING_PLAN_CHECK", name, f"Waiting for the designer: {n} question(s).")
+            if not plan_check.confirmed(job.dir):  # the final tables are always shown (section 4)
+                job.set_status("AWAITING_PLAN_CHECK")
+                return RunResult(
+                    "AWAITING_PLAN_CHECK",
+                    name,
+                    "Every item is Green: waiting for Continue on the final tables.",
+                )
+            plan_check.approve(job, by="designer (Continue on the all-Green tables)")
+            job.mark_stage_done(name, plan_check.APPROVED)
+            log.info("job %s: floor plan readout all Green", job.id)
+            continue
+        if name == "gate_elevation_choice":  # the screen comes in PV4; the job waits on its placeholder
+            job.set_status("AWAITING_ELEVATION_CHOICE")
+            return RunResult("AWAITING_ELEVATION_CHOICE", name, "Waiting for the elevation choice.")
         if name == "gate_views":
             if view_choice.needs_choice(job) and not view_choice.is_chosen(job.dir):
                 job.set_status("AWAITING_VIEWS")

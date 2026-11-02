@@ -125,8 +125,9 @@ chosen, are all Green). This screen is the build confirmation (R4c):
   method, model, area check), `overlay.png` (traced walls at 50% over the page, room outlines and names,
   clearance zones labelled "accessibility clearance (not drawn)", with the disclaimer) and `readout.json`
   (rows code writes in PV2: scale, areas, shower rule, clearance zones, same-as-another-dwelling).
-  `plan/trace_summary.json` lists them. Check the plan (PV2) shows them read-only; Continue records
-  `plan/trace_seen.json` and the questions come in PV3.
+  `plan/trace_summary.json` lists them. Each room, opening, recess and fixture the model returns carries
+  `alternative` and `question` (null when Green; `schemas/plan_trace.json`, PV3). PV2 showed them
+  read-only; PV3 adds the model-read rows and the questions (§4) and drops `plan/trace_seen.json`.
 - Multi-dwelling: one geometry per dwelling; a dwelling whose walls match another's (repeated or
   mirrored, at least `mirror_min_match` of the walls both ways) gets `mirror_of` and an Orange
   confirmation row ("Same as DWELLING 2, repeated"); its plan is reused once confirmed (PV3).
@@ -148,6 +149,48 @@ chosen, are all Green). This screen is the build confirmation (R4c):
   project memory (§13), override the reading, and re-read affected rows (overlay redrawn).
 - Gate in code: nothing moves on while any row is Orange or Red (API-level). Floor plan all Green →
   `plan/readout_approved.json` (geometry hash) → elevation choice.
+- As built (PV3, 29 Oct 2026):
+  - Rows (`plan/readout.py`, ids like `room_R1`, `connection_O2`, `window_O4`, `recess_P1`,
+    `fixture_F1`): scale, rooms, connections, recesses, windows, fixtures, clearance zones, then the area,
+    shower and same-as rows. Code scores after the model: an alternative reading, or a room / recess
+    corner or an opening (measured from its edges; corners inside a drawn opening excused) more than
+    `readout.overlay_tolerance_mm` (100) off the traced walls, cannot be Green; missing questions come
+    from `readout.questions` in `plan_trace.yaml`. Both: items matched by name, room + type, or position
+    within `readout.merge_match_mm`; an item one model did not find, or one whose model failed, is Orange.
+  - Answers: each question offers choices (`readout.options`: "Yes, that's right", "No: <alternative>",
+    "<model>: <reading>", "It is not on the drawing"; shower "Bath only" / "Bath with shower over";
+    same-as yes / no; area "The schedule is measured differently") plus free text (scale as 1:N). Choices
+    are applied by code to the primary reading (no cost); free text and an alternative are read again
+    by the primary model once per batch (`plan_reread`, cached in `plan/reread_<model>_page-N_batch-B.json`).
+    Saved in `plan/answers.json`; each also goes to `corrections.json`, `feedback.jsonl`
+    (`readout_answer`) and project memory (`memory/projects/<key>.json`, key = project number + dwelling,
+    else the drawing's sha256; reading it back is PV14). Then `p1_trace` runs again on the cached readings:
+    geometry, rows and overlay are rebuilt; answered rows are Green with "Your answer" and "was: …".
+  - All Green, including on the first reading, shows the final tables with "All items are Green." and one
+    Continue button (decision point 3: always, changed 2 Nov 2026 in the trace-parity fix round). Only that
+    press writes `plan/readout_continue.json`, and then `plan/readout_approved.json`; a change to the
+    tables after the press needs a new press. `/plan-check/continue` is refused (409) while any row is
+    Orange or Red.
+  - Trace-parity fix round (2 Nov 2026), steps F to H of `docs/pv3-fix-round-trace-parity.md`:
+    - Code is the first reader (`plan/code_items.py`): its rooms, openings and recesses go through
+      `readout.model_rows` as the primary reading, labelled `readout.code_label` ("Code"); the models are
+      second readers and see code's items as a quoted data block in the `plan_trace` prompt. Matching is by
+      name, kind and position, so "agree / different / not drawn" is derived by code from the models' own
+      readings. Where code read no rooms, the first model that answered leads, as before.
+    - Scoring (data in `readout.scoring`, `readout.questions`): code clear and every model agrees → Green;
+      code clear and a model differs → Orange "Code: cavity slider; Claude: door with swing arc"; code
+      unsure and a model picks one reading → Orange with the model's reading as best guess; an item only a
+      model found → Orange; code and models cannot read it → Red with an exact question; a room, opening
+      or recess more than 100 mm off the drawing's own wall band cannot be Green; unsure → the lower.
+    - Main table, in the project's order: scale, rooms, connections, recesses, windows, then WALL rows from
+      the overlay check against the drawing. Wording comes from `readout.templates` ("Bed 3 -> Hall",
+      "Robe in Bed 3", "Window, Bed 3 top wall"). Fixtures, areas, shower, clearance and same-as rows are in
+      a second table, "Other checks", with its own summary line; both tables gate. A per-reader column
+      (Code, Claude, OpenAI) appears only in Both mode.
+    - `plan/<dwelling>/readout.md` is the same two tables as markdown, for a side-by-side comparison with
+      the Claude project.
+  - Row click highlights the row's box (`target_mm`, shown as fractions of the overlay's `frame_mm`) on the
+    overlay in the browser; no image is drawn per click.
 
 ## 5. Elevation choice and readout (gate_elevation_choice, p1e_elevations)
 
@@ -298,6 +341,8 @@ chosen, are all Green). This screen is the build confirmation (R4c):
   `plans.readout_estimate_tokens: {input: 30000, output: 6000}` per floor-plan sheet, for the cost on
   Start the plan check (tuned at PV2 / PV15).
 - `pricing` entries for gpt-5.6-sol, claude-sonnet-5-5, gpt-image-2 (owner fills the values).
+- `paths.practice` (PV3, install root, default `private/fixtures`): a Practice run whose PDF matches a
+  test drawing set by sha256 answers the plan readout from that set's `canned/` samples.
 - New: `images.enhance_model` (default gpt-image-2), `plans.enhance_min_match` (0.95),
   `plans.render_ref_margin_m` (1.0).
 - A chosen provider without a valid key → PAUSED naming the provider (replaces the rule that hides
@@ -326,7 +371,7 @@ chosen, are all Green). This screen is the build confirmation (R4c):
 |---|---|---|---|
 | 1 | Home | Pick the PDF, Start | Always |
 | 2 | Start the plan check | Readout model (or Exterior renders only) | Always |
-| 3 | Check the plan: floor | Answer question batches | Only if anything is not Green |
+| 3 | Check the plan: floor | Answer question batches, then Continue on the final all-Green tables | Questions only if anything is not Green; Continue always |
 | 4 | Elevation choice | Do the elevation readout or skip | Always on the plan path |
 | 5 | Check the plan: elevations | Answer question batches | Only if not skipped and anything is not Green |
 | 5a | Choose plan styles | Optional Essential / Showcase (Sketch always on), Photoreal enhance, 2D/cutaway, formats, Build | Always on the plan path |
@@ -349,6 +394,8 @@ flag rounds come on top.
 - Area off by more than tolerance → Red row.
 - Both-model readout: one model fails → its rows "not read", the other's kept as Orange; Retry re-runs only
   the failed model.
+- Re-read after the designer's answers fails → plain error, answers kept in `plan/answers.json`; Retry reads
+  that batch again (PV3).
 - Build finds an item not in the readout → stage stops, Orange row added.
 - Headless browser missing or no WebGL → plain error with the fix; V1/V2A 2D still build.
 - Disclaimer missing or contrast below 4.5:1 → file not deliverable, rebuilt.

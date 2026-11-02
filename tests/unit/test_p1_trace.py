@@ -58,7 +58,7 @@ def test_vector_walls_of_a_house_are_traced_and_title_marks_dropped(rules):
 def test_footprint_matches_the_schedule_total(rules):
     pdf = _pdf(FIXTURE_03)
     vp = vector_walls.extract(pdf, 2, 100, rules.walls)
-    closed = vector_walls.closures(vp, rules.areas.footprint_max_gap_mm, rules.walls.min_wall_mm)
+    closed = vector_walls.closures(vp, rules.areas.footprint_max_gap_mm, rules.walls.min_wall_mm, rules.walls)
     m = areas.measure([vector_walls.polygon(r) for r in vp.walls], closed, [], rules)
     total = areas.parse_schedule(_words(pdf, 2), rules)[""]["total"]
     assert abs(m.total_m2 - total) <= rules.areas.tolerance * total
@@ -170,13 +170,14 @@ def test_orange_or_red_rows_need_a_question_and_green_rows_have_none():
     )
 
 
-def test_area_rows_are_red_over_tolerance():
+def test_area_rows_are_red_over_tolerance(rules):
     results = [
         {"area": "garage", "traced_m2": 34.0, "schedule_m2": 32.0, "within": False, "read": True},
         {"area": "living", "traced_m2": 0.0, "schedule_m2": 100.0, "within": False, "read": False},
     ]
-    (r,) = rows.area_rows(results, 0.03)
+    (r,) = rows.area_rows(results, 0.03, rules)
     assert r["confidence"] == "RED" and "+6.2%" in r["reading"] and r["question"]
+    assert [o["key"] for o in r["options"]] == ["schedule"]
 
 
 # --- overlay and keys ----------------------------------------------------------------------------

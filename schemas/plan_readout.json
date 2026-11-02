@@ -1,6 +1,6 @@
 {
   "type": "object",
-  "description": "plan/readout.json: floor plan readout with each model's own reading per row. DRAFT (PV0): shape may change when the stage that writes it is built.",
+  "description": "plan/<dwelling>/readout.json: floor plan readout rows (PLAN_VISUALS_SPEC section 4), with each model's own reading per row and the designer's answers.",
   "properties": {
     "dwelling": {
       "type": "string"
@@ -94,24 +94,179 @@
               "string",
               "null"
             ]
+          },
+          "target_mm": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "description": "[x0, y0, x1, y1] in mm, page coordinates"
+          },
+          "changed": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the reading was before the answer"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "key": {
+                  "type": "string"
+                },
+                "label": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "key",
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Answer choices offered with the question; free text is always allowed"
+          },
+          "ref": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "collection": {
+                "type": "string",
+                "enum": [
+                  "rooms",
+                  "openings",
+                  "recesses",
+                  "fixtures"
+                ]
+              },
+              "item_id": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "model_items": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "model": {
+                      "type": "string"
+                    },
+                    "item_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "model",
+                    "item_id"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Each model's own id for this item"
+              }
+            },
+            "required": [
+              "collection",
+              "item_id",
+              "model",
+              "model_items"
+            ],
+            "additionalProperties": false,
+            "description": "The reading item a model-read row comes from; null for rows code writes"
+          },
+          "table": {
+            "type": "string",
+            "enum": [
+              "main",
+              "other"
+            ],
+            "description": "main: the project's table; other: 'Other checks'"
           }
         },
         "required": [
           "id",
           "item",
           "category",
+          "table",
           "readings",
           "reading",
           "alternative",
           "evidence",
           "confidence",
           "question",
-          "answer"
+          "answer",
+          "target_mm",
+          "changed",
+          "options",
+          "ref"
         ],
         "additionalProperties": false
       }
     },
     "summary": {
+      "type": "object",
+      "properties": {
+        "green": {
+          "type": "integer"
+        },
+        "orange": {
+          "type": "integer"
+        },
+        "red": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "green",
+        "orange",
+        "red"
+      ],
+      "additionalProperties": false
+    },
+    "frame_mm": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "The part of the page the overlay shows, in mm"
+    },
+    "main_summary": {
+      "type": "object",
+      "properties": {
+        "green": {
+          "type": "integer"
+        },
+        "orange": {
+          "type": "integer"
+        },
+        "red": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "green",
+        "orange",
+        "red"
+      ],
+      "additionalProperties": false
+    },
+    "other_summary": {
       "type": "object",
       "properties": {
         "green": {
@@ -136,7 +291,10 @@
     "dwelling",
     "models",
     "rows",
-    "summary"
+    "summary",
+    "frame_mm",
+    "main_summary",
+    "other_summary"
   ],
   "additionalProperties": false
 }

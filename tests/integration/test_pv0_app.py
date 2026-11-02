@@ -83,5 +83,5 @@ def test_plan_status_shows_the_coming_placeholder(env):  # noqa: F811
     job = load_job(env.settings.path("jobs") / job_id)
     job.set_status("AWAITING_ELEVATION_CHOICE")
     out = env.client.get(f"/api/jobs/{job_id}").json()
-    assert out["screen"] == "coming" and out["coming"] == "This screen is coming in PV4."
+    assert out["screen"] == "coming" and out["coming"] == "Elevation choice (coming in PV4)."
     assert out["status_text"] == "Do the elevation readout, or skip it?" and out["can_cancel"]

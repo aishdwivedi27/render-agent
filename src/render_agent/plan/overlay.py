@@ -25,6 +25,25 @@ def _font(px: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
         return ImageFont.load_default(size=px)
 
 
+def _box(
+    size: tuple[int, int], mm_per_px: float, region: Rect, margin_mm: float
+) -> tuple[int, int, int, int]:
+    """The page pixels the overlay shows: the dwelling plus the margin, inside the page."""
+    return (
+        max(0, int((region[0] - margin_mm) / mm_per_px)),
+        max(0, int((region[1] - margin_mm) / mm_per_px)),
+        min(size[0], int((region[2] + margin_mm) / mm_per_px) + 1),
+        min(size[1], int((region[3] + margin_mm) / mm_per_px) + 1),
+    )
+
+
+def frame_mm(page_png: Path, mm_per_px: float, region: Rect, rules: TraceRules) -> list[float]:
+    """The part of the page the overlay shows, in mm (so a row's box can be highlighted on it)."""
+    with Image.open(page_png) as src:
+        size = src.size
+    return [round(v * mm_per_px, 1) for v in _box(size, mm_per_px, region, rules.overlay.margin_mm)]
+
+
 def draw(
     page_png: Path, mm_per_px: float, geometry: dict[str, Any], region: Rect, rules: TraceRules
 ) -> Image.Image:
@@ -32,13 +51,7 @@ def draw(
     o = rules.overlay
     with Image.open(page_png) as src:
         page = src.convert("RGB")
-    m = o.margin_mm
-    box = (
-        max(0, int((region[0] - m) / mm_per_px)),
-        max(0, int((region[1] - m) / mm_per_px)),
-        min(page.width, int((region[2] + m) / mm_per_px) + 1),
-        min(page.height, int((region[3] + m) / mm_per_px) + 1),
-    )
+    box = _box(page.size, mm_per_px, region, o.margin_mm)
     base = page.crop(box).convert("RGBA")
     layer = Image.new("RGBA", base.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(layer)

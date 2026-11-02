@@ -6,6 +6,10 @@ walls:
   max_fill_share: <redacted>
   dot_max_mm: <redacted>
   cluster_gap_mm: <redacted>
+  end_max_mm: <redacted>
+  keep_share: <redacted>
+  dot_aspect_min: <redacted>
+  outline_min_jog_mm: <redacted>
 areas:
   tolerance: <redacted>
   veneer_mm: <redacted>
@@ -42,23 +46,156 @@ showers:
   shower_words:
   - <redacted>
   question: <redacted>
+  options:
+    bath_only: <redacted>
+    shower_over: <redacted>
 recesses:
   robe:
     min_depth_mm: <redacted>
     max_depth_mm: <redacted>
+    min_aspect: <redacted>
+    max_aspect: <redacted>
+    rooms:
+    - <redacted>
     where: <redacted>
   shower_recess:
     min_depth_mm: <redacted>
     max_depth_mm: <redacted>
+    min_aspect: <redacted>
+    max_aspect: <redacted>
+    rooms:
+    - <redacted>
     where: <redacted>
   linen:
     min_depth_mm: <redacted>
     max_depth_mm: <redacted>
+    min_aspect: <redacted>
+    max_aspect: <redacted>
+    rooms:
+    - <redacted>
     where: <redacted>
   nib:
     min_depth_mm: <redacted>
     max_depth_mm: <redacted>
+    min_aspect: <redacted>
+    max_aspect: <redacted>
+    rooms: []
     where: <redacted>
+recess_search:
+  min_pocket_mm: <redacted>
+  max_share: <redacted>
+  drawn_rect_kinds:
+  - <redacted>
+  drawn_rect_min_mm: <redacted>
+  drawn_corner_kinds:
+  - <redacted>
+  drawn_max_share: <redacted>
+  drawn_max_ink: <redacted>
+  drawn_ink_inset_mm: <redacted>
+  drawn_min_mm:
+    shower_recess: <redacted>
+  drawn_rect_cover: <redacted>
+  drawn_raster_mm_per_px: <redacted>
+  drawn_dark_below: <redacted>
+  drawn_skip_mm: <redacted>
+  end_wall_mm: <redacted>
+  front_line_kinds:
+  - <redacted>
+  front_line_margin_mm: <redacted>
+  front_line_tol_mm: <redacted>
+  evidence:
+    wall_jog: <redacted>
+    drawn: <redacted>
+    no_band: <redacted>
+  sides:
+  - <redacted>
+openings:
+  min_gap_mm: <redacted>
+  max_gap_mm: <redacted>
+  max_thickness_mm: <redacted>
+  door_max_mm: <redacted>
+  walkway_min_mm: <redacted>
+  door_min_mm: <redacted>
+  walkway_max_mm: <redacted>
+  across_max_thickness_mm: <redacted>
+  garage_min_mm: <redacted>
+  raster_mm_per_px: <redacted>
+  dark_below: <redacted>
+  line_cover: <redacted>
+  dash_cover:
+  - <redacted>
+  dash_transitions: <redacted>
+  arc_min: <redacted>
+  arc_radii:
+  - <redacted>
+  arc_contrast: <redacted>
+  leaf_min: <redacted>
+  arc_tolerance_mm: <redacted>
+  arc_over_cavity: <redacted>
+  arc_over_lines: <redacted>
+  window_lines_min: <redacted>
+  cavity_words:
+  - <redacted>
+  garage_words:
+  - <redacted>
+  text_search_mm: <redacted>
+  cavity_search_mm: <redacted>
+  cavity_dash_search_mm: <redacted>
+  code_pattern: <redacted>
+  code_suffixes:
+  - <redacted>
+  code_search_mm: <redacted>
+  door_code_height: <redacted>
+  ends:
+    h:
+    - <redacted>
+    v:
+    - <redacted>
+  sides:
+    h:
+    - <redacted>
+    v:
+    - <redacted>
+  evidence:
+    hinged_door: <redacted>
+    window: <redacted>
+    sliding_door: <redacted>
+    cavity_slider: <redacted>
+    cavity_line: <redacted>
+    garage_door: <redacted>
+    open_walkway: <redacted>
+    arch: <redacted>
+    open_walkway_ends: <redacted>
+    open_walkway_t: <redacted>
+    exterior_nothing: <redacted>
+    conflict: <redacted>
+rooms:
+  tidy_mm: <redacted>
+  seal_mm: <redacted>
+  min_area_m2: <redacted>
+  label_line_mm: <redacted>
+  label_gap_mm: <redacted>
+  words:
+  - <redacted>
+  expand:
+    BED: <redacted>
+    ENS: <redacted>
+    LDRY: <redacted>
+    KIT: <redacted>
+    WIR: <redacted>
+    WIP: <redacted>
+  unlabelled_name: <redacted>
+overlay_check:
+  margin_mm: <redacted>
+  max_rows: <redacted>
+  merge_mm: <redacted>
+  look_mm: <redacted>
+  questions:
+    missing: <redacted>
+    extra: <redacted>
+  evidence:
+    missing: <redacted>
+    extra: <redacted>
 clearance_label: <redacted>
 mirror_min_match: <redacted>
 overlay:
@@ -68,3 +205,71 @@ overlay:
   clearance_colour: <redacted>
   margin_mm: <redacted>
   max_edge_px: <redacted>
+readout:
+  overlay_tolerance_mm: <redacted>
+  merge_match_mm: <redacted>
+  batch_size: <redacted>
+  code_label: <redacted>
+  main_kinds:
+  - <redacted>
+  other_title: <redacted>
+  scoring:
+    unsure_takes_lower: true
+    ambiguous_best_guess: <redacted>
+  templates:
+    item:
+      room: <redacted>
+      recess: <redacted>
+      opening: <redacted>
+      opening_no_side: <redacted>
+      opening_no_room: <redacted>
+      wall: <redacted>
+    reading:
+      room: <redacted>
+      code: <redacted>
+      hinge: <redacted>
+      swing: <redacted>
+      width: <redacted>
+      wall_missing: <redacted>
+      wall_extra: <redacted>
+    evidence:
+      room: <redacted>
+      room_unlabelled: <redacted>
+    sides:
+      h:
+      - <redacted>
+      v:
+      - <redacted>
+  kind_labels:
+    hinged_door: <redacted>
+    cavity_slider: <redacted>
+    sliding_door: <redacted>
+    open_walkway: <redacted>
+    arch: <redacted>
+    garage_door: <redacted>
+    window: <redacted>
+  recess_labels:
+    robe: <redacted>
+    shower_recess: <redacted>
+    linen: <redacted>
+    nib: <redacted>
+    other: <redacted>
+  questions:
+    default: <redacted>
+    alternative: <redacted>
+    off_walls: <redacted>
+    differ: <redacted>
+    only_one: <redacted>
+    not_read: <redacted>
+    ambiguous: <redacted>
+    unreadable: <redacted>
+    unlabelled: <redacted>
+    window_code: <redacted>
+  options:
+    confirm: <redacted>
+    alternative: <redacted>
+    use_model: <redacted>
+    not_there: <redacted>
+    schedule: <redacted>
+    same: <redacted>
+    different: <redacted>

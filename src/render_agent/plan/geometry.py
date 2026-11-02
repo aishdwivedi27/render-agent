@@ -163,6 +163,7 @@ def build(
     method: str,
     models: list[str],
     rules: TraceRules,
+    wall_outlines: list[tuple[list[Point], bool]] | None = None,
 ) -> dict[str, Any]:
     """geometry.json for one dwelling (schemas/plan_geometry.json, without area_check)."""
     ids = [f"W{i + 1}" for i in range(len(walls))]
@@ -219,6 +220,10 @@ def build(
                 )
         return out
 
+    # a shower the designer confirmed (R18) is "confirmed"; everything else read is "drawn"
+    confirmed = {
+        str(f["id"]): "confirmed" for f in reading.get("fixtures", []) if f.get("source") == "confirmed"
+    }
     return {
         "dwelling": dwelling,
         "mirror_of": None,
@@ -234,11 +239,15 @@ def build(
             }
             for i, r in enumerate(walls)
         ],
+        "wall_outlines": [
+            {"points": [[x, y] for x, y in pts], "hole": hole} for pts, hole in (wall_outlines or [])
+        ],
         "rooms": rooms,
         "openings": openings,
         "recesses": shapes(reading.get("recesses", []), ("id", "kind", "room")),
         "fixtures": [
-            {**f, "source": "drawn"} for f in shapes(reading.get("fixtures", []), ("id", "type", "room"))
+            {**f, "source": confirmed.get(f["id"], "drawn")}
+            for f in shapes(reading.get("fixtures", []), ("id", "type", "room"))
         ],
         "clearance_zones": [
             {**z, "kind": "wc_clearance"} for z in shapes(reading.get("clearance_zones", []), ("id", "room"))

@@ -322,7 +322,8 @@ Finished jobs cannot be cancelled.
 **OneDrive.** If the Desktop is redirected to OneDrive, Home shows a one-time warning suggesting
 `Desktop\RenderAgent` be excluded from sync.
 
-Each directive below is also an option on the Start step. Start options are written as these directives to `start_options.txt` in the job's `input/` folder, so they are recorded with the job and go through the same validation; the app's "Practice run" is a dry run (offline reader and mock images, no key needed).
+Each directive below is also an option on the Start step. Start options are written as these directives to `start_options.txt` in the job's `input/` folder, so they are recorded with the job and go through the same validation; the app's "Practice run" is a dry run (offline reader and mock images, no key needed; from PV3 the floor
+plan readout answers from a test drawing's sample readings when the PDF is one, `paths.practice`).
 
 | Directive | Example | Effect |
 | --- | --- | --- |
@@ -350,7 +351,7 @@ Statuses (amended 15 Oct 2026, M5), each shown in the app in plain words:
 | PAUSED | Paused, needs your attention | key, credit or disk problem; nothing lost; Retry resumes |
 | FAILED | Something went wrong | error.json shown; Retry resumes the existing job |
 | (any, cancel pending) | Cancelling… | running job stops at its next step, then is removed; its Output folder moves to Output\Cancelled |
-| AWAITING_PLAN_START, AWAITING_PLAN_CHECK, AWAITING_ELEVATION_CHOICE, AWAITING_ELEVATION_CHECK, AWAITING_STYLES, AWAITING_FURNISH_CHECK, AWAITING_PLAN_REVIEW, AWAITING_CONTINUE | Start the plan check / Check the plan: questions for you / Do the elevation readout, or skip it? / Check the elevations: questions for you / Choose plan styles / Check the furniture / Review the plans / Plans are ready | plan visuals gates (PLAN_VISUALS_SPEC §1, §14; added 28 Oct 2026, PV0); until its PV step is built the app shows "This screen is coming in PV<n>" |
+| AWAITING_PLAN_START, AWAITING_PLAN_CHECK, AWAITING_ELEVATION_CHOICE, AWAITING_ELEVATION_CHECK, AWAITING_STYLES, AWAITING_FURNISH_CHECK, AWAITING_PLAN_REVIEW, AWAITING_CONTINUE | Start the plan check / Check the plan: questions for you / Do the elevation readout, or skip it? / Check the elevations: questions for you / Choose plan styles / Check the furniture / Review the plans / Plans are ready | plan visuals gates (PLAN_VISUALS_SPEC §1, §14; added 28 Oct 2026, PV0); until its PV step is built the app shows "This screen is coming in PV<n>" (the elevation choice: "Elevation choice (coming in PV4)"). AWAITING_PLAN_CHECK passes by itself once every floor plan row is Green (PV3) |
 | PLAN_COMPLETE | Finished: plans only | the designer chose Finish here on Plans are ready (PLAN_VISUALS_SPEC §9) |
 
 Stage states in `state.json`: pending, running, done, failed, skipped (with a `reason`; 28 Oct 2026).
@@ -421,7 +422,8 @@ failure (Windows toasts are phase 2); (6) retry only what can succeed; (7) spend
 | Plan | No floor plan page in the drawings on the plan path | `p1_trace` stops with NO_FLOOR_PLAN: plain `error.json` saying to check the PDF or start again with "Exterior renders only (no plans)" (PV2) |
 | Plan | No vector walls on a floor plan page (scan, image or other drafting) | The readout model traces the walls from the image; Check the plan says so and labels the walls "traced by <model>" (PLAN_VISUALS_SPEC §3, §15) |
 | Plan | Traced area differs from the drawing's area schedule by more than `areas.tolerance` (`plan_trace.yaml`, 3%) | Shown red in the area table; a Red row with a question in `plan/<dwelling>/readout.json` (PLAN_VISUALS_SPEC §15) |
-| Plan | Both readout models chosen and one fails | Its reading is "not read" and the other is used; Check the plan names the failed model with "Read again with <model>", which re-reads only that model (cached readings are kept) (PLAN_VISUALS_SPEC §15) |
+| Plan | Both readout models chosen and one fails | Its reading is "not read" and the other is used; every row the other model read is Orange ("<model> could not read the drawing…") until answered; Check the plan names the failed model with "Read again with <model>", which re-reads only that model (cached readings are kept) (PLAN_VISUALS_SPEC §15; rows PV3) |
+| Plan | Reading the plan again after the designer's answers fails (free-text answers go to the readout model) | `p1_trace` stops with a plain `error.json`; the answers stay in `plan/answers.json` and Retry reads that batch again (each batch's re-read is cached, so nothing is paid twice) (PLAN_VISUALS_SPEC §4, §15; PV3) |
 | Plan | A chosen readout model has no saved key | PAUSED before any call: "Your <Claude/OpenAI> key is not saved…", what to do "Add your <provider> key in Settings, then press Retry" (Practice runs need no key) (PLAN_VISUALS_SPEC §12, §15) |
 
 ## 10. Configuration, security, deployment
@@ -435,7 +437,10 @@ stays in the code, hidden); `images.max_images_per_round` (M5.5 refinement cap, 
 Plan visuals (28 Oct 2026, PV0; PLAN_VISUALS_SPEC §12): `plans.readout_llm_default` (`sonnet`),
 `renders.prompt_writers_default` (`[sonnet, gpt]`), `renders.check_llm_default` (`gpt`), all names
 from `llm.choices`; `images.offered_providers` (`[openai, muapi]`, first = default on screen);
-`paths.memory` (working root), `paths.engine` and `paths.assets` (install root). Every new setting has a default, so older `config.yaml` files load unchanged.
+`paths.memory` (working root), `paths.engine` and `paths.assets` (install root); `paths.practice` (install
+root, default `private/fixtures`, PV3): test drawing sets whose `canned/` sample readings a Practice run
+uses when its input PDF matches one by sha256 (no folder or no match: the offline reader as before).
+Every new setting has a default, so older `config.yaml` files load unchanged.
 Settings shows these defaults in plain words; Help checks the plan engine files, the headless
 browser's 3D drawing, a saved key per provider ("Check keys now" runs the no-cost checks),
 the wet-tile contrast and the agent memory, each with a fix text.

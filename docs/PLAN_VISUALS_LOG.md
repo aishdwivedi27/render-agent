@@ -61,3 +61,47 @@ Start the app:
 Tested: 2026-10-29
 Result: all pass
 PV2 approved 2026-10-29
+
+## PV3
+Check the plan: floor plan questions.
+
+BROWSER TEST:
+1. Practice run, Readout model Both: summary line shows a mix; the seeded row shows "Claude: ... /
+   OpenAI: ..." as Orange.
+2. Click a Red row: highlighted on the overlay; first batch starts with Red.
+3. Answer a batch: rows update and show what changed.
+4. Answer until all Green: the job moves on automatically.
+5. Repeat with Claude only: no per-model column.
+
+Note: use fixture_03 (`private/fixtures/fixture_03/input/`). A Practice run of that PDF reads the sample
+readings in `fixture_03/canned/` (Claude: MUD Orange, ENS WC symbol Red; OpenAI: the front door read as a
+cavity slider, the seeded disagreement). The other Orange rooms are where the sample outlines sit more
+than 100 mm off the traced walls. Free-text answers in a Practice run are "read again" from
+`canned/plan_reread.json`. The job then waits on "Elevation choice (coming in PV4)".
+
+Start the app:
+- PowerShell: `.\.venv\Scripts\Activate.ps1` then `python -m render_agent app --browser`
+- bash: `source .venv/bin/activate` then `python -m render_agent app --browser`
+
+Tested:
+Result:
+
+### Fix round: trace parity (steps F to H)
+
+BROWSER TEST:
+1. Practice run fixture_03, Readout model Claude: the main table lists scale, rooms, connections, recesses,
+   windows, then any wall rows; its summary line reads "X Green, Y Orange, Z Red"; "Other checks" (fixtures,
+   areas, shower, clearance) is a separate table below with its own line. No per-model column.
+2. Item names read like the project's: "Bed 3", "Bed 3 -> Hall", "Robe in Bed 3", "Window, Bed 3 top wall".
+   Click an opening row: Evidence describes the drawing (arc, dashed line, double lines, nothing).
+3. Readout model Both: columns Code, Claude, OpenAI; the seeded disagreement shows
+   "Code: ...; Claude: ...; OpenAI: ..." as Orange.
+4. Answer batches (up to 5, Red first, across both tables) until every row is Green: the final tables show
+   "All items are Green." and Continue; nothing moves on before you press Continue.
+5. Open `plan/<dwelling>/readout.md` in the job folder: the same two tables as markdown.
+6. Run `python scripts/compare_reference.py fixture_03` (PowerShell: `python scripts\compare_reference.py
+   fixture_03`) and open `docs/parity/fixture_03.md`: the owner's first-pass floor plan table (55 rows)
+   against what code reads: doors, sliders and arches, garage door, window codes, robes.
+
+Tested:
+Result:

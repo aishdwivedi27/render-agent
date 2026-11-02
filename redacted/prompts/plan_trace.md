@@ -20,6 +20,14 @@
 
 [redacted]
 
+[redacted]
+
+## What code already read from the drawing (data)
+
+[redacted]
+
+{{CODE_ITEMS}}
+
 ## Rules from the drawing standards (data)
 
 {{RULES}}

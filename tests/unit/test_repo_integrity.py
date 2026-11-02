@@ -67,6 +67,7 @@ def test_prompt_placeholders_are_known():
     known = {
         "USER_INSTRUCTIONS",
         "PAGE_NUMBER",
+        "CODE_ITEMS",
         "PAGE_COUNT",
         "SOURCE_FILE",
         "PAGE_TEXT",
@@ -88,6 +89,9 @@ def test_prompt_placeholders_are_known():
         "RULES",
         "RECESS_RULES",
         "DWELLINGS",
+        # plan_reread.md
+        "ITEMS",
+        "ANSWERS",
         # drawing_check.md
         "RENDER_ID",
         "VIEW",
